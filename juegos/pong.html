@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Pong Retro - Sergio's Arcade</title>
+    <style>
+        body { background: #0f0c29; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; font-family: 'Segoe UI', sans-serif; }
+        canvas { background: #1a1a2e; border: 2px solid #667eea; box-shadow: 0 0 20px rgba(102,126,234,0.3); }
+        .info { font-size: 1.5rem; margin-bottom: 15px; display: flex; gap: 30px; }
+        a { color: #aaa; text-decoration: none; margin-top: 20px; display: inline-block; }
+    </style>
+</head>
+<body>
+    <div class="info">
+        <span style="color:#667eea">TÚ: <span id="pScore">0</span></span>
+        <span style="color:#ff5252">IA: <span id="aiScore">0</span></span>
+    </div>
+    <canvas id="game" width="600" height="400"></canvas>
+    <p style="color:#888; font-size:0.9rem;">Mueve el ratón verticalmente para controlar tu paleta</p>
+    <a href="juegos.html">← Volver al Menú</a>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { getFirestore, addDoc, collection } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        const firebaseConfig = { apiKey: "AIzaSyBmTBMyE7Y_LgSXH1SrmEv29DLYdxkyUEw", authDomain: "compartir-textos-app.firebaseapp.com", projectId: "compartir-textos-app", storageBucket: "compartir-textos-app.firebasestorage.app", messagingSenderId: "705083380628", appId: "1:705083380628:web:ce267570e09e3ef1b27581" };
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        let currentUser = null;
+        onAuthStateChanged(auth, (user) => { if(user) currentUser = user; else window.location.href = '../index.html'; });
+
+        const canvas = document.getElementById('game');
+        const ctx = canvas.getContext('2d');
+        
+        const paddleH = 80, paddleW = 10;
+        let playerY = 160, aiY = 160;
+        let ballX = 300, ballY = 200, ballDX = 4, ballDY = 4;
+        let pScore = 0, aiScore = 0;
+
+        canvas.addEventListener('mousemove', e => {
+            const rect = canvas.getBoundingClientRect();
+            playerY = e.clientY - rect.top - paddleH/2;
+        });
+
+        function update() {
+            // Movimiento bola
+            ballX += ballDX;
+            ballY += ballDY;
+
+            // Rebote arriba/abajo
+            if(ballY <= 0 || ballY >= canvas.height) ballDY *= -1;
+
+            // IA simple
+            const aiCenter = aiY + paddleH/2;
+            if(aiCenter < ballY - 10) aiY += 3.5;
+            else if(aiCenter > ballY + 10) aiY -= 3.5;
+
+            // Colisión paletas
+            if(ballX <= paddleW && ballY >= playerY && ballY <= playerY + paddleH) {
+                ballDX *= -1.1; // Aumenta velocidad
+                ballX = paddleW;
+            }
+            if(ballX >= canvas.width - paddleW && ballY >= aiY && ballY <= aiY + paddleH) {
+                ballDX *= -1.1;
+                ballX = canvas.width - paddleW;
+            }
+
+            // Puntuación
+            if(ballX < 0) { aiScore++; resetBall(); }
+            if(ballX > canvas.width) { pScore++; resetBall(); }
+
+            draw();
+            requestAnimationFrame(update);
+        }
+
+        function resetBall() {
+            ballX = canvas.width/2; ballY = canvas.height/2;
+            ballDX = (Math.random() > 0.5 ? 4 : -4);
+            ballDY = (Math.random() > 0.5 ? 4 : -4);
+            document.getElementById('pScore').innerText = pScore;
+            document.getElementById('aiScore').innerText = aiScore;
+            
+            if(pScore >= 5 || aiScore >= 5) endGame();
+        }
+
+        function draw() {
+            ctx.fillStyle = '#1a1a2e';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Línea central
+            ctx.setLineDash([5, 15]);
+            ctx.beginPath();
+            ctx.moveTo(canvas.width/2, 0);
+            ctx.lineTo(canvas.width/2, canvas.height);
+            ctx.strokeStyle = '#333';
+            ctx.stroke();
+
+            // Paletas y bola
+            ctx.fillStyle = '#667eea';
+            ctx.fillRect(0, playerY, paddleW, paddleH);
+            ctx.fillStyle = '#ff5252';
+            ctx.fillRect(canvas.width-paddleW, aiY, paddleW, paddleH);
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(ballX, ballY, 8, 0, Math.PI*2);
+            ctx.fill();
+        }
+
+        async function endGame() {
+            cancelAnimationFrame(update);
+            const msg = pScore >= 5 ? "¡Ganaste!" : "La IA gana.";
+            alert(msg);
+            if(currentUser && pScore > aiScore) {
+                await addDoc(collection(db, "scores"), { userId: currentUser.uid, gameId: 'pong', score: pScore * 100, timestamp: new Date() });
+            }
+        }
+
+        update();
+    </script>
+</body>
+</html>
