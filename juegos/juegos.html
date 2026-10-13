@@ -5,120 +5,195 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Arcade Personal - Sergio's Hub</title>
     <style>
-        :root { --primary: #667eea; --secondary: #764ba2; --dark: #1a1a2e; }
-        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
+        :root { 
+            --primary: #667eea; 
+            --secondary: #764ba2; 
+            --accent: #00f2fe;
+            --dark-bg: #0f0c29; 
+            --card-bg: rgba(255, 255, 255, 0.05);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', system-ui, sans-serif; }
         
         body { 
-            background: var(--dark); 
+            background: linear-gradient(135deg, var(--dark-bg) 0%, #302b63 50%, #24243e 100%);
             color: white; 
             min-height: 100vh; 
             padding: 20px;
-            background-image: radial-gradient(circle at 50% 50%, #2a2a4e 0%, #1a1a2e 100%);
+            overflow-x: hidden;
+        }
+
+        /* Fondo animado sutil */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle at 50% 50%, rgba(102, 126, 234, 0.1) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: -1;
         }
 
         .container { max-width: 1200px; margin: 0 auto; }
 
-        /* Header */
+        /* Header Estilo Arcade */
         header { 
             display: flex; 
             justify-content: space-between; 
             align-items: center; 
-            margin-bottom: 40px; 
-            padding-bottom: 20px;
+            margin-bottom: 50px; 
+            padding: 20px 0;
             border-bottom: 1px solid rgba(255,255,255,0.1);
         }
+
         h1 { 
-            font-size: 2rem; 
-            background: linear-gradient(to right, var(--primary), var(--secondary)); 
+            font-size: 2.5rem; 
+            font-weight: 800;
+            background: linear-gradient(to right, var(--primary), var(--accent)); 
             -webkit-background-clip: text; 
             color: transparent; 
+            text-shadow: 0 0 30px rgba(102, 126, 234, 0.3);
+            letter-spacing: -1px;
         }
+
         .back-btn { 
             background: rgba(255,255,255,0.1); 
             color: white; 
-            border: none; 
-            padding: 10px 20px; 
-            border-radius: 8px; 
+            border: 1px solid rgba(255,255,255,0.2);
+            padding: 12px 24px; 
+            border-radius: 50px; 
             cursor: pointer; 
             text-decoration: none;
-            transition: 0.3s;
+            transition: all 0.3s ease;
+            font-weight: 600;
+            backdrop-filter: blur(10px);
         }
-        .back-btn:hover { background: rgba(255,255,255,0.2); transform: translateX(-5px); }
+        .back-btn:hover { 
+            background: var(--primary); 
+            border-color: var(--primary);
+            transform: translateX(-5px); 
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
 
-        /* Grid de Juegos */
+        /* Grid de Juegos Mejorado */
         .games-grid { 
             display: grid; 
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); 
-            gap: 25px; 
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); 
+            gap: 30px; 
+            padding-bottom: 50px;
         }
 
         .game-card { 
-            background: rgba(255,255,255,0.05); 
-            border-radius: 16px; 
+            background: var(--card-bg); 
+            border-radius: 20px; 
             overflow: hidden; 
-            transition: all 0.3s ease; 
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); 
             border: 1px solid rgba(255,255,255,0.1);
             position: relative;
+            backdrop-filter: blur(10px);
         }
+
         .game-card:hover { 
-            transform: translateY(-10px); 
-            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3); 
+            transform: translateY(-10px) scale(1.02); 
+            box-shadow: 0 20px 40px rgba(0,0,0,0.4), 0 0 20px rgba(102, 126, 234, 0.2); 
             border-color: var(--primary);
         }
 
         .game-thumb { 
-            height: 160px; 
+            height: 180px; 
             display: flex; 
             align-items: center; 
             justify-content: center; 
-            font-size: 4rem;
-            background: linear-gradient(135deg, rgba(102,126,234,0.2), rgba(118,75,162,0.2));
+            font-size: 5rem;
+            background: linear-gradient(135deg, rgba(102,126,234,0.1), rgba(118,75,162,0.1));
+            position: relative;
+            overflow: hidden;
         }
 
-        .game-info { padding: 20px; }
-        .game-title { font-size: 1.3rem; font-weight: bold; margin-bottom: 8px; }
-        .game-desc { font-size: 0.9rem; color: #aaa; margin-bottom: 15px; line-height: 1.4; }
+        /* Efecto de brillo en hover sobre la imagen */
+        .game-card:hover .game-thumb::after {
+            content: '';
+            position: absolute;
+            top: 0; left: -100%; width: 100%; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+            animation: shine 0.8s infinite;
+        }
+
+        @keyframes shine { to { left: 100%; } }
+
+        .game-info { padding: 25px; }
+        .game-title { font-size: 1.4rem; font-weight: 700; margin-bottom: 10px; color: white; }
+        .game-desc { font-size: 0.95rem; color: #b0b0d0; margin-bottom: 20px; line-height: 1.5; }
         
         .play-btn { 
             display: block; 
             width: 100%; 
-            padding: 12px; 
-            background: linear-gradient(to right, var(--primary), var(--secondary)); 
+            padding: 14px; 
+            background: linear-gradient(90deg, var(--primary), var(--secondary)); 
             color: white; 
             text-align: center; 
             text-decoration: none; 
-            border-radius: 8px; 
-            font-weight: bold;
-            transition: 0.3s;
+            border-radius: 12px; 
+            font-weight: 700;
+            transition: all 0.3s;
+            letter-spacing: 0.5px;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
         }
-        .play-btn:hover { filter: brightness(1.2); letter-spacing: 1px; }
+        .play-btn:hover { 
+            filter: brightness(1.2); 
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+            transform: translateY(-2px);
+        }
 
         .score-badge { 
             position: absolute; 
             top: 15px; 
             right: 15px; 
             background: rgba(0,0,0,0.6); 
-            padding: 5px 12px; 
+            padding: 6px 14px; 
             border-radius: 20px; 
-            font-size: 0.8rem; 
-            font-weight: bold;
+            font-size: 0.85rem; 
+            font-weight: 700;
             backdrop-filter: blur(5px);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: var(--accent);
+            z-index: 2;
         }
 
         /* Estado de carga */
-        .loading { text-align: center; padding: 50px; color: #666; font-style: italic; }
+        .loading { 
+            grid-column: 1 / -1; 
+            text-align: center; 
+            padding: 80px; 
+            color: #666; 
+            font-size: 1.2rem;
+        }
+        .spinner {
+            width: 40px; height: 40px; border: 4px solid rgba(255,255,255,0.1);
+            border-top-color: var(--primary); border-radius: 50%;
+            margin: 0 auto 20px; animation: spin 1s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        @media (max-width: 768px) {
+            h1 { font-size: 1.8rem; }
+            .games-grid { grid-template-columns: 1fr; }
+            header { flex-direction: column; gap: 20px; text-align: center; }
+        }
     </style>
 </head>
 <body>
 
 <div class="container">
     <header>
-        <h1> Arcade Personal</h1>
-        <a href="../index.html" class="back-btn"> Volver al Hub</a>
+        <h1>🎮 ARCADE PERSONAL</h1>
+        <a href="../index.html" class="back-btn">← Volver al Hub</a>
     </header>
 
     <div id="games-container" class="games-grid">
-        <div class="loading">Cargando tus juegos y récords...</div>
+        <div class="loading">
+            <div class="spinner"></div>
+            Cargando tus juegos y récords...
+        </div>
     </div>
 </div>
 
@@ -127,7 +202,6 @@
     import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
     import { getFirestore, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-    // Configuración (la misma que en index.html)
     const firebaseConfig = {
         apiKey: "AIzaSyBmTBMyE7Y_LgSXH1SrmEv29DLYdxkyUEw",
         authDomain: "compartir-textos-app.firebaseapp.com",
@@ -141,22 +215,21 @@
     const auth = getAuth(app);
     const db = getFirestore(app);
 
-    // Catálogo de juegos (Aquí añades nuevos juegos fácilmente)
+    // Catálogo de juegos (Fácil de expandir)
     const gamesCatalog = [
         { id: 'snake', name: 'Snake Clásico', icon: '🐍', desc: 'El clásico juego de la serpiente. Come manzanas y no choques con tu cola.', file: 'snake.html' },
-        { id: 'tetris', name: 'Tetris Block', icon: '🧱', desc: 'Encaja las piezas geométricas antes de que lleguen arriba. ¡Pura adrenalina!', file: 'tetris.html' },
+        { id: 'clicker', name: 'Super Clicker', icon: '💰', desc: 'Haz clic para ganar monedas y compra mejoras automáticas. ¡Adictivo!', file: 'clicker.html' },
         { id: 'memoria', name: 'Memoria Flash', icon: '🃏', desc: 'Encuentra todas las parejas de cartas en el menor tiempo posible.', file: 'memoria.html' },
-        { id: 'clicker', name: 'Super Clicker', icon: '👆', desc: 'Haz clic para ganar monedas y compra mejoras automáticas.', file: 'clicker.html' },
-        { id: 'wordle', name: 'Adivina Palabra', icon: '', desc: 'Tienes 6 intentos para adivinar la palabra secreta del día.', file: 'wordle.html' },
-        { id: 'pong', name: 'Pong Retro', icon: '🏓', desc: 'Desafía a la IA en este clásico del tenis de mesa digital.', file: 'pong.html' }
+        { id: 'tetris', name: 'Tetris Block', icon: '🧱', desc: 'Encaja las piezas geométricas antes de que lleguen arriba.', file: 'tetris.html' },
+        { id: 'pong', name: 'Pong Retro', icon: '🏓', desc: 'Desafía a la IA en este clásico del tenis de mesa digital.', file: 'pong.html' },
+        { id: 'wordle', name: 'Adivina Palabra', icon: '', desc: 'Tienes 6 intentos para adivinar la palabra secreta del día.', file: 'wordle.html' }
     ];
 
     let currentUser = null;
 
-    // Verificar autenticación
     onAuthStateChanged(auth, async (user) => {
         if (!user) {
-            window.location.href = '../index.html'; // Redirigir si no está logueado
+            window.location.href = '../index.html';
             return;
         }
         currentUser = user;
@@ -174,17 +247,23 @@
             const snapshot = await getDocs(q);
             snapshot.forEach(doc => {
                 const data = doc.data();
-                scoresMap[data.gameId] = data.score;
+                // Guardar solo la puntuación más alta por juego
+                if (!scoresMap[data.gameId] || data.score > scoresMap[data.gameId]) {
+                    scoresMap[data.gameId] = data.score;
+                }
             });
         } catch (e) { console.log("No hay récords aún"); }
 
-        // Generar tarjetas
-        gamesCatalog.forEach(game => {
+        // Generar tarjetas con animación escalonada
+        gamesCatalog.forEach((game, index) => {
             const highScore = scoresMap[game.id] || 0;
             const scoreText = highScore > 0 ? `🏆 ${highScore.toLocaleString()}` : 'Sin récord';
             
             const card = document.createElement('div');
             card.className = 'game-card';
+            card.style.animation = `fadeInUp 0.5s ease forwards ${index * 0.1}s`;
+            card.style.opacity = '0'; // Inicialmente invisible para la animación
+            
             card.innerHTML = `
                 <div class="score-badge">${scoreText}</div>
                 <div class="game-thumb">${game.icon}</div>
@@ -196,6 +275,16 @@
             `;
             container.appendChild(card);
         });
+
+        // Añadir keyframes dinámicamente para la animación de entrada
+        const styleSheet = document.createElement("style");
+        styleSheet.innerText = `
+            @keyframes fadeInUp {
+                from { opacity: 0; transform: translateY(30px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
+        `;
+        document.head.appendChild(styleSheet);
     }
 </script>
 </body>
