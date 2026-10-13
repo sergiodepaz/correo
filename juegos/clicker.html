@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Super Clicker - Sergio's Arcade</title>
+    <style>
+        body { background: #1a1a2e; color: white; font-family: 'Segoe UI', sans-serif; text-align: center; padding: 20px; }
+        .coin-btn { width: 200px; height: 200px; border-radius: 50%; background: linear-gradient(135deg, #ffd700, #ffaa00); border: none; font-size: 4rem; cursor: pointer; box-shadow: 0 0 30px rgba(255,215,0,0.4); transition: transform 0.1s; margin: 30px 0; }
+        .coin-btn:active { transform: scale(0.95); }
+        .stats { font-size: 2rem; font-weight: bold; color: #ffd700; margin-bottom: 10px; }
+        .upgrades { display: grid; gap: 10px; max-width: 400px; margin: 0 auto; }
+        .upgrade { background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px; cursor: pointer; border: 1px solid transparent; transition: 0.3s; }
+        .upgrade:hover { border-color: #ffd700; background: rgba(255,215,0,0.1); }
+        .upgrade.disabled { opacity: 0.5; cursor: not-allowed; }
+        a { color: #aaa; text-decoration: none; margin-top: 30px; display: inline-block; }
+    </style>
+</head>
+<body>
+    <div class="stats"> <span id="coins">0</span></div>
+    <div style="color:#aaa; margin-bottom:20px;">Monedas por segundo: <span id="cps">0</span></div>
+    
+    <button class="coin-btn" onclick="clickCoin()">💰</button>
+
+    <div class="upgrades">
+        <div class="upgrade" id="upg1" onclick="buyUpgrade(1)">
+            <strong>Cursor Mágico (+1/s)</strong><br>Coste: <span id="cost1">15</span> 
+        </div>
+        <div class="upgrade" id="upg2" onclick="buyUpgrade(2)">
+            <strong>Mina de Oro (+5/s)</strong><br>Coste: <span id="cost2">100</span> 🪙
+        </div>
+        <div class="upgrade" id="upg3" onclick="buyUpgrade(3)">
+            <strong>Fábrica de Monedas (+20/s)</strong><br>Coste: <span id="cost3">500</span> 
+        </div>
+    </div>
+
+    <a href="juegos.html">← Volver al Menú</a>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { getFirestore, addDoc, collection } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        const firebaseConfig = { apiKey: "AIzaSyBmTBMyE7Y_LgSXH1SrmEv29DLYdxkyUEw", authDomain: "compartir-textos-app.firebaseapp.com", projectId: "compartir-textos-app", storageBucket: "compartir-textos-app.firebasestorage.app", messagingSenderId: "705083380628", appId: "1:705083380628:web:ce267570e09e3ef1b27581" };
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        let currentUser = null;
+        onAuthStateChanged(auth, (user) => { if(user) currentUser = user; else window.location.href = '../index.html'; });
+
+        let coins = 0;
+        let cps = 0;
+        let costs = [15, 100, 500];
+        let cpsValues = [1, 5, 20];
+
+        window.clickCoin = function() {
+            coins++;
+            updateUI();
+        }
+
+        window.buyUpgrade = function(idx) {
+            if(coins >= costs[idx]) {
+                coins -= costs[idx];
+                cps += cpsValues[idx];
+                costs[idx] = Math.floor(costs[idx] * 1.5);
+                updateUI();
+            }
+        }
+
+        function updateUI() {
+            document.getElementById('coins').innerText = Math.floor(coins);
+            document.getElementById('cps').innerText = cps;
+            for(let i=0; i<3; i++) {
+                document.getElementById(`cost${i+1}`).innerText = costs[i];
+                document.getElementById(`upg${i+1}`).className = coins >= costs[i] ? 'upgrade' : 'upgrade disabled';
+            }
+        }
+
+        setInterval(() => {
+            if(cps > 0) {
+                coins += cps / 10;
+                updateUI();
+            }
+        }, 100);
+
+        // Guardar récord cada 30 segundos
+        setInterval(async () => {
+            if(currentUser && coins > 0) {
+                await addDoc(collection(db, "scores"), { userId: currentUser.uid, gameId: 'clicker', score: Math.floor(coins), timestamp: new Date() });
+            }
+        }, 30000);
+    </script>
+</body>
+</html>
