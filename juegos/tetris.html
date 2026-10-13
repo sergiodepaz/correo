@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Tetris Block - Sergio's Arcade</title>
+    <style>
+        body { background: #0f0c29; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; font-family: 'Segoe UI', sans-serif; }
+        canvas { border: 2px solid #764ba2; background: #000; box-shadow: 0 0 20px rgba(118,75,162,0.4); }
+        .ui { text-align: center; margin-bottom: 15px; }
+        .score { font-size: 2rem; font-weight: bold; color: #00f2fe; }
+        button { background: #764ba2; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin-top: 10px; font-size: 1rem; }
+        a { color: #aaa; text-decoration: none; margin-top: 20px; display: inline-block; }
+    </style>
+</head>
+<body>
+    <div class="ui">
+        <div class="score">Puntos: <span id="score">0</span></div>
+        <button onclick="startGame()">▶ Iniciar / Reiniciar</button>
+    </div>
+    <canvas id="game" width="300" height="600"></canvas>
+    <a href="juegos.html">← Volver al Menú</a>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { getFirestore, addDoc, collection } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        const firebaseConfig = { apiKey: "AIzaSyBmTBMyE7Y_LgSXH1SrmEv29DLYdxkyUEw", authDomain: "compartir-textos-app.firebaseapp.com", projectId: "compartir-textos-app", storageBucket: "compartir-textos-app.firebasestorage.app", messagingSenderId: "705083380628", appId: "1:705083380628:web:ce267570e09e3ef1b27581" };
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        let currentUser = null;
+        onAuthStateChanged(auth, (user) => { if(user) currentUser = user; else window.location.href = '../index.html'; });
+
+        const canvas = document.getElementById('game');
+        const ctx = canvas.getContext('2d');
+        const ROWS = 20, COLS = 10, BLOCK_SIZE = 30;
+        let board = Array(ROWS).fill().map(() => Array(COLS).fill(0));
+        let score = 0, gameLoop, currentPiece, currentX, currentY;
+        
+        const SHAPES = [
+            [[1,1,1,1]], // I
+            [[1,1],[1,1]], // O
+            [[0,1,0],[1,1,1]], // T
+            [[1,0,0],[1,1,1]], // L
+            [[0,0,1],[1,1,1]], // J
+            [[0,1,1],[1,1,0]], // S
+            [[1,1,0],[0,1,1]]  // Z
+        ];
+        const COLORS = ['#00f2fe', '#ffd700', '#a020f0', '#ff8c00', '#0000ff', '#00ff00', '#ff0000'];
+
+        window.startGame = function() {
+            board = Array(ROWS).fill().map(() => Array(COLS).fill(0));
+            score = 0;
+            document.getElementById('score').innerText = score;
+            spawnPiece();
+            if(gameLoop) clearInterval(gameLoop);
+            gameLoop = setInterval(update, 500);
+        }
+
+        function spawnPiece() {
+            const idx = Math.floor(Math.random() * SHAPES.length);
+            currentPiece = { shape: SHAPES[idx], color: COLORS[idx] };
+            currentX = Math.floor(COLS / 2) - Math.floor(currentPiece.shape[0].length / 2);
+            currentY = 0;
+            if(collision(0, 0)) gameOver();
+        }
+
+        function update() {
+            if(!collision(0, 1)) {
+                currentY++;
+            } else {
+                merge();
+                clearLines();
+                spawnPiece();
+            }
+            draw();
+        }
+
+        function collision(dx, dy) {
+            for(let r=0; r<currentPiece.shape.length; r++) {
+                for(let c=0; c<currentPiece.shape[r].length; c++) {
+                    if(currentPiece.shape[r][c]) {
+                        const newX = currentX + c + dx;
+                        const newY = currentY + r + dy;
+                        if(newX < 0 || newX >= COLS || newY >= ROWS || (newY >= 0 && board[newY][newX])) return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        function merge() {
+            for(let r=0; r<currentPiece.shape.length; r++) {
+                for(let c=0; c<currentPiece.shape[r].length; c++) {
+                    if(currentPiece.shape[r][c]) board[currentY + r][currentX + c] = currentPiece.color;
+                }
+            }
+        }
+
+        function clearLines() {
+            for(let r=ROWS-1; r>=0; r--) {
+                if(board[r].every(cell => cell !== 0)) {
+                    board.splice(r, 1);
+                    board.unshift(Array(COLS).fill(0));
+                    score += 100;
+                    document.getElementById('score').innerText = score;
+                    r++; 
+                }
+            }
+        }
+
+        function draw() {
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Dibujar tablero
+            for(let r=0; r<ROWS; r++) {
+                for(let c=0; c<COLS; c++) {
+                    if(board[r][c]) {
+                        ctx.fillStyle = board[r][c];
+                        ctx.fillRect(c*BLOCK_SIZE, r*BLOCK_SIZE, BLOCK_SIZE-2, BLOCK_SIZE-2);
+                    }
+                }
+            }
+            
+            // Dibujar pieza actual
+            ctx.fillStyle = currentPiece.color;
+            for(let r=0; r<currentPiece.shape.length; r++) {
+                for(let c=0; c<currentPiece.shape[r].length; c++) {
+                    if(currentPiece.shape[r][c]) {
+                        ctx.fillRect((currentX+c)*BLOCK_SIZE, (currentY+r)*BLOCK_SIZE, BLOCK_SIZE-2, BLOCK_SIZE-2);
+                    }
+                }
+            }
+        }
+
+        async function gameOver() {
+            clearInterval(gameLoop);
+            alert(`¡Juego terminado! Puntuación: ${score}`);
+            if(currentUser && score > 0) {
+                await addDoc(collection(db, "scores"), { userId: currentUser.uid, gameId: 'tetris', score, timestamp: new Date() });
+            }
+        }
+
+        document.addEventListener('keydown', e => {
+            if(e.key === 'ArrowLeft' && !collision(-1, 0)) currentX--;
+            if(e.key === 'ArrowRight' && !collision(1, 0)) currentX++;
+            if(e.key === 'ArrowDown' && !collision(0, 1)) currentY++;
+            if(e.key === 'ArrowUp') rotate();
+            draw();
+        });
+
+        function rotate() {
+            const rotated = currentPiece.shape[0].map((_, i) => currentPiece.shape.map(row => row[i]).reverse());
+            const oldShape = currentPiece.shape;
+            currentPiece.shape = rotated;
+            if(collision(0, 0)) currentPiece.shape = oldShape;
+        }
+    </script>
+</body>
+</html>
