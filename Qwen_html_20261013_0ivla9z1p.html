@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mi Gmail Privado - Google Login</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        
+        /* Header */
+        header {
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            text-align: center;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+        h1 { color: #667eea; }
+
+        /* Login Card */
+        .login-card {
+            background: white;
+            max-width: 400px;
+            margin: 50px auto;
+            padding: 40px;
+            border-radius: 15px;
+            text-align: center;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+        }
+        
+        .google-btn {
+            background: #fff;
+            color: #757575;
+            border: 1px solid #ddd;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            width: 100%;
+            transition: background 0.3s;
+        }
+        .google-btn:hover { background: #f1f1f1; }
+        .google-icon { width: 20px; height: 20px; }
+
+        /* Main Interface */
+        .main-interface { display: none; }
+        
+        .user-bar {
+            background: white;
+            padding: 15px 25px;
+            border-radius: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .stat-box {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        .stat-num { font-size: 2em; font-weight: bold; color: #667eea; }
+
+        .content-grid {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 20px;
+        }
+        @media (max-width: 768px) { .content-grid { grid-template-columns: 1fr; } }
+
+        .panel {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        input, textarea {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        
+        button.action-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            width: 100%;
+            font-weight: bold;
+        }
+
+        .msg-item {
+            background: #f9f9f9;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border-left: 4px solid #667eea;
+        }
+        .msg-header { display: flex; justify-content: space-between; font-size: 0.9em; color: #666; }
+        .msg-subject { font-weight: bold; margin: 5px 0; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>📧 Mi Gmail Privado</h1>
+        <p>Acceso seguro con Google</p>
+    </header>
+
+    <!-- Pantalla de Login -->
+    <div id="loginScreen" class="login-card">
+        <h2>Bienvenido</h2>
+        <p style="margin: 20px 0; color: #666;">Inicia sesión para ver y enviar mensajes</p>
+        <button class="google-btn" onclick="signInWithGoogle()">
+            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="google-icon" alt="G">
+            Continuar con Google
+        </button>
+    </div>
+
+    <!-- Interfaz Principal -->
+    <div id="appScreen" class="main-interface">
+        <div class="user-bar">
+            <div>
+                <h3 id="userName">Usuario</h3>
+                <small id="userEmail">email@gmail.com</small>
+            </div>
+            <button onclick="logout()" style="background:#ff5252; color:white; border:none; padding:8px 15px; border-radius:5px; cursor:pointer;">Salir</button>
+        </div>
+
+        <div class="stats">
+            <div class="stat-box">
+                <div class="stat-num" id="totalMsgs">0</div>
+                <div>Total Mensajes</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-num" id="activeUsers">0</div>
+                <div>Usuarios</div>
+            </div>
+        </div>
+
+        <div class="content-grid">
+            <!-- Formulario de Envío -->
+            <div class="panel">
+                <h3>✉️ Nuevo Mensaje</h3>
+                <input type="text" id="toInput" placeholder="Para (correo)">
+                <input type="text" id="subjectInput" placeholder="Asunto">
+                <textarea id="bodyInput" rows="5" placeholder="Escribe tu mensaje..."></textarea>
+                <button class="action-btn" onclick="sendMsg()">Enviar</button>
+            </div>
+
+            <!-- Bandeja de Entrada (Admin View) -->
+            <div class="panel">
+                <h3>📨 Bandeja Global (Admin)</h3>
+                <input type="text" id="searchBox" placeholder="Buscar en mensajes..." onkeyup="filterMsgs()">
+                <div id="msgsList" style="max-height: 500px; overflow-y: auto;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+    import { getFirestore, collection, addDoc, getDocs, query, orderBy, Timestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyBmTBMyE7Y_LgSXH1SrmEv29DLYdxkyUEw",
+        authDomain: "compartir-textos-app.firebaseapp.com",
+        projectId: "compartir-textos-app",
+        storageBucket: "compartir-textos-app.firebasestorage.app",
+        messagingSenderId: "705083380628",
+        appId: "1:705083380628:web:ce267570e09e3ef1b27581",
+        measurementId: "G-8GH28F0YJ0"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const provider = new GoogleAuthProvider();
+
+    let currentUser = null;
+
+    // Funciones globales
+    window.signInWithGoogle = async () => {
+        try {
+            await signInWithPopup(auth, provider);
+        } catch (error) {
+            alert("Error al iniciar sesión: " + error.message);
+        }
+    };
+
+    window.logout = () => signOut(auth);
+
+    window.sendMsg = async () => {
+        const to = document.getElementById('toInput').value;
+        const subject = document.getElementById('subjectInput').value;
+        const body = document.getElementById('bodyInput').value;
+
+        if(!to || !subject || !body) return alert("Completa todos los campos");
+
+        try {
+            await addDoc(collection(db, "messages"), {
+                from: currentUser.email,
+                fromName: currentUser.displayName,
+                to: to,
+                subject: subject,
+                body: body,
+                timestamp: Timestamp.now()
+            });
+            alert("Mensaje enviado");
+            document.getElementById('toInput').value = "";
+            document.getElementById('subjectInput').value = "";
+            document.getElementById('bodyInput').value = "";
+            loadMessages();
+        } catch(e) { console.error(e); }
+    };
+
+    window.filterMsgs = () => {
+        const term = document.getElementById('searchBox').value.toLowerCase();
+        document.querySelectorAll('.msg-item').forEach(el => {
+            el.style.display = el.innerText.toLowerCase().includes(term) ? 'block' : 'none';
+        });
+    };
+
+    async function loadMessages() {
+        const q = query(collection(db, "messages"), orderBy("timestamp", "desc"));
+        const snapshot = await getDocs(q);
+        const list = document.getElementById('msgsList');
+        list.innerHTML = "";
+        
+        const users = new Set();
+        snapshot.forEach(doc => {
+            const d = doc.data();
+            users.add(d.from);
+            users.add(d.to);
+            
+            const div = document.createElement('div');
+            div.className = 'msg-item';
+            div.innerHTML = `
+                <div class="msg-header">
+                    <span><b>De:</b> ${d.fromName}</span>
+                    <span>${d.timestamp?.toDate().toLocaleTimeString()}</span>
+                </div>
+                <div class="msg-subject">${d.subject}</div>
+                <div>Para: ${d.to}</div>
+                <p>${d.body}</p>
+            `;
+            list.appendChild(div);
+        });
+
+        document.getElementById('totalMsgs').innerText = snapshot.size;
+        document.getElementById('activeUsers').innerText = users.size;
+    }
+
+    // Monitor de estado de autenticación
+    onAuthStateChanged(auth, (user) => {
+        if (user) {
+            currentUser = user;
+            document.getElementById('loginScreen').style.display = 'none';
+            document.getElementById('appScreen').style.display = 'block';
+            document.getElementById('userName').innerText = user.displayName;
+            document.getElementById('userEmail').innerText = user.email;
+            loadMessages();
+        } else {
+            currentUser = null;
+            document.getElementById('loginScreen').style.display = 'block';
+            document.getElementById('appScreen').style.display = 'none';
+        }
+    });
+</script>
+
+</body>
+</html>
