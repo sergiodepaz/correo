@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Memoria Flash - Sergio's Arcade</title>
+    <style>
+        body { background: #1a1a2e; color: white; font-family: 'Segoe UI', sans-serif; text-align: center; padding: 20px; }
+        .info { font-size: 1.5rem; margin-bottom: 20px; color: #667eea; }
+        .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; max-width: 400px; margin: 0 auto; }
+        .card { aspect-ratio: 1; background: #2a2a4e; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; transition: transform 0.3s; border: 2px solid transparent; }
+        .card.flipped { background: #667eea; transform: rotateY(180deg); }
+        .card.matched { background: #4caf50; border-color: #81c784; cursor: default; }
+        button { background: #667eea; color: white; border: none; padding: 10px 25px; border-radius: 5px; cursor: pointer; margin-top: 20px; font-size: 1rem; }
+        a { color: #aaa; text-decoration: none; margin-top: 20px; display: inline-block; }
+    </style>
+</head>
+<body>
+    <div class="info">Tiempo: <span id="timer">0</span>s | Movimientos: <span id="moves">0</span></div>
+    <div class="grid" id="board"></div>
+    <button onclick="initGame()">🔄 Nueva Partida</button>
+    <br><a href="juegos.html">← Volver al Menú</a>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { getFirestore, addDoc, collection } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        const firebaseConfig = { apiKey: "AIzaSyBmTBMyE7Y_LgSXH1SrmEv29DLYdxkyUEw", authDomain: "compartir-textos-app.firebaseapp.com", projectId: "compartir-textos-app", storageBucket: "compartir-textos-app.firebasestorage.app", messagingSenderId: "705083380628", appId: "1:705083380628:web:ce267570e09e3ef1b27581" };
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        let currentUser = null;
+        onAuthStateChanged(auth, (user) => { if(user) currentUser = user; else window.location.href = '../index.html'; });
+
+        const emojis = ['🎮','','🎯','🎪','🎨','🎭','🎸','🎺'];
+        let cards = [], flipped = [], matched = 0, moves = 0, timer = 0, interval, locked = false;
+
+        window.initGame = function() {
+            clearInterval(interval);
+            timer = 0; moves = 0; matched = 0; flipped = []; locked = false;
+            document.getElementById('timer').innerText = 0;
+            document.getElementById('moves').innerText = 0;
+            
+            cards = [...emojis, ...emojis].sort(() => Math.random() - 0.5);
+            const board = document.getElementById('board');
+            board.innerHTML = '';
+            
+            cards.forEach((emoji, i) => {
+                const card = document.createElement('div');
+                card.className = 'card';
+                card.dataset.index = i;
+                card.dataset.emoji = emoji;
+                card.onclick = () => flipCard(card);
+                board.appendChild(card);
+            });
+
+            interval = setInterval(() => {
+                timer++;
+                document.getElementById('timer').innerText = timer;
+            }, 1000);
+        }
+
+        function flipCard(card) {
+            if(locked || card.classList.contains('flipped') || card.classList.contains('matched')) return;
+            
+            card.classList.add('flipped');
+            card.innerText = card.dataset.emoji;
+            flipped.push(card);
+
+            if(flipped.length === 2) {
+                moves++;
+                document.getElementById('moves').innerText = moves;
+                locked = true;
+                
+                if(flipped[0].dataset.emoji === flipped[1].dataset.emoji) {
+                    flipped.forEach(c => c.classList.add('matched'));
+                    flipped = [];
+                    matched += 2;
+                    locked = false;
+                    if(matched === cards.length) endGame();
+                } else {
+                    setTimeout(() => {
+                        flipped.forEach(c => { c.classList.remove('flipped'); c.innerText = ''; });
+                        flipped = [];
+                        locked = false;
+                    }, 800);
+                }
+            }
+        }
+
+        async function endGame() {
+            clearInterval(interval);
+            alert(`¡Ganaste en ${timer}s con ${moves} movimientos!`);
+            if(currentUser) {
+                // Score inverso: menos tiempo y movimientos = mejor puntuación
+                const score = Math.max(1000 - (timer * 2) - (moves * 5), 10);
+                await addDoc(collection(db, "scores"), { userId: currentUser.uid, gameId: 'memoria', score, timestamp: new Date() });
+            }
+        }
+
+        initGame();
+    </script>
+</body>
+</html>
