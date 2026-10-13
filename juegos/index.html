@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arcade Personal - Sergio's Hub</title>
+    <style>
+        :root { --primary: #667eea; --secondary: #764ba2; --dark: #1a1a2e; }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
+        
+        body { 
+            background: var(--dark); 
+            color: white; 
+            min-height: 100vh; 
+            padding: 20px;
+            background-image: radial-gradient(circle at 50% 50%, #2a2a4e 0%, #1a1a2e 100%);
+        }
+
+        .container { max-width: 1200px; margin: 0 auto; }
+
+        /* Header */
+        header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            margin-bottom: 40px; 
+            padding-bottom: 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        h1 { 
+            font-size: 2rem; 
+            background: linear-gradient(to right, var(--primary), var(--secondary)); 
+            -webkit-background-clip: text; 
+            color: transparent; 
+        }
+        .back-btn { 
+            background: rgba(255,255,255,0.1); 
+            color: white; 
+            border: none; 
+            padding: 10px 20px; 
+            border-radius: 8px; 
+            cursor: pointer; 
+            text-decoration: none;
+            transition: 0.3s;
+        }
+        .back-btn:hover { background: rgba(255,255,255,0.2); transform: translateX(-5px); }
+
+        /* Grid de Juegos */
+        .games-grid { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); 
+            gap: 25px; 
+        }
+
+        .game-card { 
+            background: rgba(255,255,255,0.05); 
+            border-radius: 16px; 
+            overflow: hidden; 
+            transition: all 0.3s ease; 
+            border: 1px solid rgba(255,255,255,0.1);
+            position: relative;
+        }
+        .game-card:hover { 
+            transform: translateY(-10px); 
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3); 
+            border-color: var(--primary);
+        }
+
+        .game-thumb { 
+            height: 160px; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            font-size: 4rem;
+            background: linear-gradient(135deg, rgba(102,126,234,0.2), rgba(118,75,162,0.2));
+        }
+
+        .game-info { padding: 20px; }
+        .game-title { font-size: 1.3rem; font-weight: bold; margin-bottom: 8px; }
+        .game-desc { font-size: 0.9rem; color: #aaa; margin-bottom: 15px; line-height: 1.4; }
+        
+        .play-btn { 
+            display: block; 
+            width: 100%; 
+            padding: 12px; 
+            background: linear-gradient(to right, var(--primary), var(--secondary)); 
+            color: white; 
+            text-align: center; 
+            text-decoration: none; 
+            border-radius: 8px; 
+            font-weight: bold;
+            transition: 0.3s;
+        }
+        .play-btn:hover { filter: brightness(1.2); letter-spacing: 1px; }
+
+        .score-badge { 
+            position: absolute; 
+            top: 15px; 
+            right: 15px; 
+            background: rgba(0,0,0,0.6); 
+            padding: 5px 12px; 
+            border-radius: 20px; 
+            font-size: 0.8rem; 
+            font-weight: bold;
+            backdrop-filter: blur(5px);
+        }
+
+        /* Estado de carga */
+        .loading { text-align: center; padding: 50px; color: #666; font-style: italic; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1> Arcade Personal</h1>
+        <a href="../index.html" class="back-btn"> Volver al Hub</a>
+    </header>
+
+    <div id="games-container" class="games-grid">
+        <div class="loading">Cargando tus juegos y récords...</div>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+    import { getFirestore, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    // Configuración (la misma que en index.html)
+    const firebaseConfig = {
+        apiKey: "AIzaSyBmTBMyE7Y_LgSXH1SrmEv29DLYdxkyUEw",
+        authDomain: "compartir-textos-app.firebaseapp.com",
+        projectId: "compartir-textos-app",
+        storageBucket: "compartir-textos-app.firebasestorage.app",
+        messagingSenderId: "705083380628",
+        appId: "1:705083380628:web:ce267570e09e3ef1b27581"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    // Catálogo de juegos (Aquí añades nuevos juegos fácilmente)
+    const gamesCatalog = [
+        { id: 'snake', name: 'Snake Clásico', icon: '🐍', desc: 'El clásico juego de la serpiente. Come manzanas y no choques con tu cola.', file: 'snake.html' },
+        { id: 'tetris', name: 'Tetris Block', icon: '🧱', desc: 'Encaja las piezas geométricas antes de que lleguen arriba. ¡Pura adrenalina!', file: 'tetris.html' },
+        { id: 'memoria', name: 'Memoria Flash', icon: '🃏', desc: 'Encuentra todas las parejas de cartas en el menor tiempo posible.', file: 'memoria.html' },
+        { id: 'clicker', name: 'Super Clicker', icon: '👆', desc: 'Haz clic para ganar monedas y compra mejoras automáticas.', file: 'clicker.html' },
+        { id: 'wordle', name: 'Adivina Palabra', icon: '', desc: 'Tienes 6 intentos para adivinar la palabra secreta del día.', file: 'wordle.html' },
+        { id: 'pong', name: 'Pong Retro', icon: '🏓', desc: 'Desafía a la IA en este clásico del tenis de mesa digital.', file: 'pong.html' }
+    ];
+
+    let currentUser = null;
+
+    // Verificar autenticación
+    onAuthStateChanged(auth, async (user) => {
+        if (!user) {
+            window.location.href = '../index.html'; // Redirigir si no está logueado
+            return;
+        }
+        currentUser = user;
+        await renderGames();
+    });
+
+    async function renderGames() {
+        const container = document.getElementById('games-container');
+        container.innerHTML = '';
+
+        // Obtener récords del usuario actual
+        const scoresMap = {};
+        try {
+            const q = query(collection(db, "scores"), where("userId", "==", currentUser.uid));
+            const snapshot = await getDocs(q);
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                scoresMap[data.gameId] = data.score;
+            });
+        } catch (e) { console.log("No hay récords aún"); }
+
+        // Generar tarjetas
+        gamesCatalog.forEach(game => {
+            const highScore = scoresMap[game.id] || 0;
+            const scoreText = highScore > 0 ? `🏆 ${highScore.toLocaleString()}` : 'Sin récord';
+            
+            const card = document.createElement('div');
+            card.className = 'game-card';
+            card.innerHTML = `
+                <div class="score-badge">${scoreText}</div>
+                <div class="game-thumb">${game.icon}</div>
+                <div class="game-info">
+                    <div class="game-title">${game.name}</div>
+                    <div class="game-desc">${game.desc}</div>
+                    <a href="${game.file}" class="play-btn">▶ JUGAR AHORA</a>
+                </div>
+            `;
+            container.appendChild(card);
+        });
+    }
+</script>
+</body>
+</html>
