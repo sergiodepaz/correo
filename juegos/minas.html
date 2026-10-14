@@ -30,18 +30,8 @@
     <a class="back" href="juegos.html">← Volver al Menú</a>
 </div>
 
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { getFirestore, addDoc, collection } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-
-const firebaseConfig = { apiKey: "AIzaSyBmTBMyE7Y_LgSXH1SrmEv29DLYdxkyUEw", authDomain: "compartir-textos-app.firebaseapp.com", projectId: "compartir-textos-app", storageBucket: "compartir-textos-app.firebasestorage.app", messagingSenderId: "705083380628", appId: "1:705083380628:web:ce267570e09e3ef1b27581" };
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-let currentUser = null;
-onAuthStateChanged(auth, (u) => { if (u) currentUser = u; else window.location.href = '../index.html'; });
-
+<script src="arcade-lib.js"></script>
+<script>
 let N=9,M=10,grid,cells,openCount,flags,started,timer,t0,over;
 const board=document.getElementById('board');
 
@@ -91,8 +81,7 @@ function win(){
   const secs=Math.floor((Date.now()-t0)/1000);
   const score=Math.max(100, N*N*100 - secs*10 - M*5);
   document.getElementById('msg').innerText=`🎉 ¡Campo despejado en ${secs}s! +${score} pts`;
-  if(currentUser)addDoc(collection(db,"scores"),{userId:currentUser.uid,gameId:'minas',score,timestamp:Date.now()}).catch(()=>{});
-}
+  Arcade.addScore(score);
 function lose(chord){
   over=true; clearInterval(timer); revealAllMines();
   document.getElementById('msg').innerText='💥 ¡Boom! Has pisado una mina. Pulsa un tamaño para reiniciar.';

@@ -24,17 +24,10 @@
     <a class="back" href="juegos.html">← Volver al Menú</a>
 </div>
 
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { getFirestore, addDoc, collection } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-
-const firebaseConfig = { apiKey: "AIzaSyBmTBMyE7Y_LgSXH1SrmEv29DLYdxkyUEw", authDomain: "compartir-textos-app.firebaseapp.com", projectId: "compartir-textos-app", storageBucket: "compartir-textos-app.firebasestorage.app", messagingSenderId: "705083380628", appId: "1:705083380628:web:ce267570e09e3ef1b27581" };
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
+<script src="arcade-lib.js"></script>
+<script>
 let currentUser = null;
-onAuthStateChanged(auth, (u) => { if (u) currentUser = u; else window.location.href = '../index.html'; });
+Arcade.onReady(u=>{ currentUser=u; });
 
 const zone=document.getElementById('zone');
 let state='idle', t0=0, timer=null, results=[];
@@ -65,8 +58,8 @@ zone.addEventListener('click',()=>{
     state='done';
     document.getElementById('stats').innerText=`Muestras: ${results.join(', ')} ms`;
     const score=Math.max(1, Math.round(100000/ms)); // más rápida = más puntos
-    if(currentUser&&results.length>=3)addDoc(collection(db,"scores"),{userId:currentUser.uid,gameId:'reaccion',score,timestamp:Date.now()}).catch(()=>{});
-    setTimeout(()=>{ if(state==='done')zone.innerHTML+='<p style="margin-top:10px;color:#b0b0d0">Clic para otra ronda</p>'; },800);
+    if(results.length>=3){ Arcade.addScore(score); $('best').innerText=Arcade.best().toLocaleString(); }
+    setTimeout(()=>{ box.innerHTML='<p style="margin-top:10px;color:#b0b0d0">Clic para otra ronda</p>'; },800);
   }
 });
 </script>

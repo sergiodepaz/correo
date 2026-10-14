@@ -33,22 +33,8 @@
   <a href="juegos.html" class="back">← Volver al catálogo</a>
 </div>
 
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { getFirestore, collection, query, where, getDocs, addDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-
-const firebaseConfig = {
-  apiKey: "AIzaSyBmTBMyE7Y_LgSXH1SrmEv29DLYdxkyUEw",
-  authDomain: "compartir-textos-app.firebaseapp.com",
-  projectId: "compartir-textos-app",
-  storageBucket: "compartir-textos-app.firebasestorage.app",
-  messagingSenderId: "705083380628",
-  appId: "1:705083380628:web:ce267570e09e3ef1b27581"
-};
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
+<script src="arcade-lib.js"></script>
+<script>
 let currentUser = null;
 const GAME_ID='pongneon';
 
@@ -61,13 +47,9 @@ const $=id=>document.getElementById(id);
 const rnd=(a,b)=>a+Math.random()*(b-a);
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 
-async function loadBest(){ if(!currentUser)return; try{
-  const snap=await getDocs(query(collection(db,"scores"),where("userId","==",currentUser.uid),where("gameId","==",GAME_ID)));
-  let m=0; snap.forEach(d=>{ if(d.data().score>m) m=d.data().score; });
-  if(m>0)$('best').innerText=m.toLocaleString();
-}catch(e){} }
+function loadBest(){ const b=Arcade.best(); if(b>0)$('best').innerText=b.toLocaleString(); }
 
-onAuthStateChanged(auth,u=>{ if(u){currentUser=u;loadBest();} });
+Arcade.onReady(u=>{ currentUser=u; if(typeof loadBest==='function')loadBest(); });
 
 // ===== PONG NEÓN vs IA =====
 const S={L:0,R:0};
@@ -125,7 +107,7 @@ function endRound(winner){
   } else { endRun('🤖 LA IA GANA '+S.R+'-'+S.L,'Se ha calentado... prueba el MODO FUEGO ganándole un saque tras otro.'); addScore(S.L*100); }
   S.L=0;S.R=0;updHud();
 }
-function addScore(n){ if(currentUser&&n>0)addDoc(collection(db,"scores"),{userId:currentUser.uid,gameId:GAME_ID,score:n,timestamp:new Date()}).then(loadBest).catch(()=>{}); }
+function addScore(n){ Arcade.addScore(n); if(typeof $==='function')$('best').innerText=Arcade.best().toLocaleString(); }
 function draw(){
   ctx.save();
   if(shake>0)ctx.translate(rnd(-4,4),rnd(-4,4));

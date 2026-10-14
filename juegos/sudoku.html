@@ -35,6 +35,17 @@
   .diffsel button { padding:8px 14px; border-radius:20px; cursor:pointer; font-weight:700; font-size:.85rem;
                     background:rgba(255,255,255,.07); color:var(--muted); border:1px solid rgba(255,255,255,.15); }
   .diffsel button.on { background:linear-gradient(90deg,var(--primary),var(--accent)); color:#04121f; }
+  #ovWin { position:fixed; inset:0; z-index:9990; display:none; align-items:center; justify-content:center;
+           background:rgba(10,8,30,.75); backdrop-filter:blur(6px); animation:fadein .25s ease; }
+  #ovWin .card { background:linear-gradient(145deg,#1b1b38,#2a2350); border:1px solid rgba(0,242,254,.4);
+                 border-radius:20px; padding:30px 36px; text-align:center; max-width:340px; width:90%;
+                 box-shadow:0 0 60px rgba(102,126,234,.5); animation:pop .35s cubic-bezier(.2,1.6,.4,1); }
+  #ovWin h2 { font-size:1.6rem; margin-bottom:12px; background:linear-gradient(90deg,#667eea,#00f2fe);
+              -webkit-background-clip:text; background-clip:text; color:transparent; }
+  #ovWin p { color:var(--muted); line-height:1.7; margin-bottom:18px; }
+  #ovWin .btn-neon { margin:4px; }
+  @keyframes fadein { from{opacity:0} to{opacity:1} }
+  @keyframes pop { from{transform:scale(.7);opacity:0} to{transform:scale(1);opacity:1} }
 </style>
 </head>
 <body>
@@ -53,26 +64,19 @@
   </div>
   <a href="juegos.html" class="back">← Volver al catálogo</a>
 </div>
+<div id="ovWin"><div class="card">
+  <h2 id="winTitle">🎉 ¡SUDOKU RESUELTO!</h2>
+  <p id="winMsg"></p>
+  <button class="btn-neon" id="winAgain">🔄 SIGUIENTE SUDOKU</button>
+</div></div>
 
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { getFirestore, collection, query, where, getDocs, addDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-
-const app = initializeApp({apiKey:"AIzaSyBmTBMyE7Y_LgSXH1SrmEv29DLYdxkyUEw",authDomain:"compartir-textos-app.firebaseapp.com",projectId:"compartir-textos-app",storageBucket:"compartir-textos-app.firebasestorage.app",messagingSenderId:"705083380628",appId:"1:705083380628:web:ce267570e09e3ef1b27581"});
-const auth = getAuth(app), db = getFirestore(app);
-let currentUser = null, bestScore = 0;
-
-onAuthStateChanged(auth, async u => {
-  if (!u) { window.location.href = '../index.html'; return; }
-  currentUser = u;
-  try {
-    const snap = await getDocs(query(collection(db,"scores"), where("userId","==",u.uid), where("gameId","==","sudoku")));
-    snap.forEach(d => bestScore = Math.max(bestScore, d.data().score));
-    document.getElementById('best').innerText = bestScore || '—';
-  } catch(e){}
-});
-
+<script src="arcade-lib.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+let currentUser=null, bestScore=0;
+Arcade.onReady(u=>{ currentUser=u; bestScore=Arcade.best(); $('best').innerText=bestScore?bestScore.toLocaleString():'—'; });
+let AC=null;
+function beep(f,d=.08,type='square',v=.12){ try{ AC=AC||new (window.AudioContext||window.webkitAudioContext)(); const o=AC.createOscillator(),g=AC.createGain(); o.type=type;o.frequency.value=f;g.gain.setValueAtTime(v,AC.currentTime);g.gain.exponentialRampToValueAtTime(.001,AC.currentTime+d);o.connect(g).connect(AC.destination);o.start();o.stop(AC.currentTime+d);}catch(e){} }
 // ===== Generador de sudoku =====
 const shuffle = a => { for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];} return a; };
 function generateFull() {
@@ -165,6 +169,7 @@ function setVal(v){
       if(errs>=3){ lose(); return; } }
     else clearPeerNotes(r,c,v);
   } else { puzzle[r][c]=0; notes[r][c].clear(); }
+  v ? (puzzle[r][c]===solution[r][c] ? beep(680,.05,'triangle',.1) : beep(200,.12,'sawtooth',.12)) : beep(300,.04,'sine',.06);
   refresh(); checkWin();
 }
 function clearPeerNotes(r,c,v){
@@ -178,18 +183,18 @@ function checkWin(){
   const secs=Math.floor((Date.now()-startT)/1000);
   const base={easy:2000,medium:3000,hard:4500}[diff];
   const score=Math.max(100, base - secs*2 - errs*100);
-  setTimeout(async ()=>{
-    alert(`🎉 ¡Sudoku resuelto!\nTiempo: ${secs}s · Errores: ${errs}\nPuntuación: ${score}`);
-    if(currentUser){
-      await addDoc(collection(db,"scores"),{userId:currentUser.uid, gameId:'sudoku', score, timestamp:new Date()}).catch(()=>{});
-      bestScore=Math.max(bestScore,score);
-      document.getElementById('best').innerText=bestScore;
-    }
-  },150);
+  const ov=$('ovWin');
+  $('winMsg').innerHTML=`⏱️ <b>${Math.floor(secs/60)}:${String(secs%60).padStart(2,'0')}</b> · ❌ <b>${errs}</b><br>Tiempo y errores cuentan: menos es mejor.<br>PUNTUACIÓN: <b style="color:#00f2fe">${score.toLocaleString()}</b>`;
+  ov.style.display='flex';
+  Arcade.addScore(score);
+  beep(523,.12,'triangle',.18);setTimeout(()=>beep(659,.12,'triangle',.18),120);setTimeout(()=>beep(784,.22,'triangle',.18),240);
 }
 function lose(){
   finished=true; clearInterval(timer);
-  alert('💥 ¡3 errores! Se acabó esta partida.');
+  const ov=$('ovWin');
+  $('winMsg').innerHTML='💥 ¡Tres errores!<br>La partida se ha acabado.<br><span style="font-size:.85em;color:#b0b0d0">Pulsa 🔄 NUEVO para intentarlo otra vez</span>';
+  ov.style.display='flex';
+  beep(180,.3,'sawtooth',.2);
 }
 
 // Teclado numérico + táctil
@@ -205,7 +210,7 @@ document.addEventListener('keydown',e=>{
     const r=sel/9|0,c=sel%9;
     if(e.key==='ArrowUp'&&r>0) sel-=9; if(e.key==='ArrowDown'&&r<8) sel+=9;
     if(e.key==='ArrowLeft'&&c>0) sel--; if(e.key==='ArrowRight'&&c<8) sel++;
-    refresh();
+    refresh(); beep(420,.03,'sine',.05);
   }
 });
 document.getElementById('noteBtn').onclick=function(){ noteMode=!noteMode; this.classList.toggle('on',noteMode); };
@@ -213,9 +218,10 @@ document.getElementById('eraseBtn').onclick=()=>setVal(0);
 document.getElementById('hintBtn').onclick=()=>{
   if(sel<0||finished) return;
   const r=sel/9|0,c=sel%9; if(given[r][c]) return;
-  puzzle[r][c]=solution[r][c]; notes[r][c].clear(); errs++; refresh(); checkWin();
+  puzzle[r][c]=solution[r][c]; notes[r][c].clear(); errs++; $('errs').innerText=errs; refresh(); beep(980,.1,'triangle',.12); checkWin();
 };
-document.getElementById('newBtn').onclick=()=>newGame(diff);
+document.getElementById('newBtn').onclick=()=>{$('ovWin').style.display='none'; newGame(diff);};
+document.getElementById('winAgain').onclick=()=>{$('ovWin').style.display='none'; newGame(diff);};
 document.querySelectorAll('.diffsel button').forEach(b=>b.onclick=function(){
   document.querySelectorAll('.diffsel button').forEach(x=>x.classList.remove('on'));
   this.classList.add('on'); newGame(this.dataset.d);
