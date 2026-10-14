@@ -20,23 +20,16 @@
     <canvas id="game" width="300" height="600"></canvas>
     <a href="juegos.html">← Volver al Menú</a>
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-        import { getFirestore, addDoc, collection } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-
-        const firebaseConfig = { apiKey: "AIzaSyBmTBMyE7Y_LgSXH1SrmEv29DLYdxkyUEw", authDomain: "compartir-textos-app.firebaseapp.com", projectId: "compartir-textos-app", storageBucket: "compartir-textos-app.firebasestorage.app", messagingSenderId: "705083380628", appId: "1:705083380628:web:ce267570e09e3ef1b27581" };
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        let currentUser = null;
-        onAuthStateChanged(auth, (user) => { if(user) currentUser = user; else window.location.href = '../index.html'; });
+    <script src="arcade-lib.js"></script>
+        <script>
 
         const canvas = document.getElementById('game');
         const ctx = canvas.getContext('2d');
         const ROWS = 20, COLS = 10, BLOCK_SIZE = 30;
         let board = Array(ROWS).fill().map(() => Array(COLS).fill(0));
         let score = 0, gameLoop, currentPiece, currentX, currentY;
+        let level = 1, linesTotal = 0, dropMs = 500, paused = false;
+        let nextIdx = Math.floor(Math.random() * SHAPES.length);   // "siguiente pieza"
         
         const SHAPES = [
             [[1,1,1,1]], // I
@@ -51,19 +44,36 @@
 
         window.startGame = function() {
             board = Array(ROWS).fill().map(() => Array(COLS).fill(0));
-            score = 0;
+            score = 0; level = 1; linesTotal = 0; dropMs = 500; paused = false;
             document.getElementById('score').innerText = score;
             spawnPiece();
             if(gameLoop) clearInterval(gameLoop);
-            gameLoop = setInterval(update, 500);
+            gameLoop = setInterval(tick, dropMs);
         }
 
+        function tick() { if(!paused) update(); }
+
         function spawnPiece() {
-            const idx = Math.floor(Math.random() * SHAPES.length);
+            const idx = nextIdx;
+            nextIdx = Math.floor(Math.random() * SHAPES.length);
             currentPiece = { shape: SHAPES[idx], color: COLORS[idx] };
             currentX = Math.floor(COLS / 2) - Math.floor(currentPiece.shape[0].length / 2);
             currentY = 0;
+            drawNext();
             if(collision(0, 0)) gameOver();
+        }
+
+        function drawNext() {
+            ctx.fillStyle = 'rgba(255,255,255,.35)';
+            ctx.font = '12px Segoe UI';
+            ctx.textAlign = 'right';
+            ctx.fillText('SIGUIENTE:', canvas.width - 8, 16);
+            const sh = SHAPES[nextIdx];
+            for(let r=0; r<sh.length; r++) for(let c=0; c<sh[r].length; c++) {
+                ctx.fillStyle = sh[r][c] ? COLORS[nextIdx] : 'transparent';
+                if(sh[r][c]) ctx.fillRect(canvas.width - 70 + c*14, 24 + r*14, 12, 12);
+            }
+            ctx.textAlign = 'left';
         }
 
         function update() {
@@ -135,21 +145,44 @@
             }
         }
 
-        async function gameOver() {
+        function gameOver() {
             clearInterval(gameLoop);
-            alert(`¡Juego terminado! Puntuación: ${score}`);
-            if(currentUser && score > 0) {
-                await addDoc(collection(db, "scores"), { userId: currentUser.uid, gameId: 'tetris', score, timestamp: new Date() });
-            }
+            Arcade.beep(150, .35, 'sawtooth', .15);
+            ctx.fillStyle = 'rgba(0,0,0,.75)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#ff5252';
+            ctx.font = 'bold 26px Segoe UI';
+            ctx.fillText('FIN DE LA PARTIDA', canvas.width/2, canvas.height/2 - 24);
+            ctx.fillStyle = '#fff';
+            ctx.font = '18px Segoe UI';
+            ctx.fillText('Puntos: ' + score + ' · Nivel ' + level, canvas.width/2, canvas.height/2 + 8);
+            ctx.fillStyle = '#00f2fe';
+            ctx.font = '14px Segoe UI';
+            ctx.fillText('Pulsa ESPACIO o INICIAR para reintentar', canvas.width/2, canvas.height/2 + 40);
+            ctx.textAlign = 'left';
+            if (score > 0) Arcade.addScore(score);
         }
 
+        let started = false;
         document.addEventListener('keydown', e => {
-            if(e.key === 'ArrowLeft' && !collision(-1, 0)) currentX--;
+            if(['ArrowLeft','ArrowRight','ArrowDown','ArrowUp',' '].includes(e.key)) e.preventDefault();
+            if(e.repeat && e.key !== 'ArrowDown') return;
+            if(e.key === ' ') {
+                if(!started || isOver()) { startGame(); started = true; return; }
+                paused = !paused;
+                Arcade.toast(paused ? '⏸ PAUSA — ESPACIO para seguir' : '▶ ¡A seguir!');
+                return;
+            }
+            if(paused) return;
+            if(e.key === 'ArrowLeft' && !collision(-1, 0)) currentX++;
             if(e.key === 'ArrowRight' && !collision(1, 0)) currentX++;
-            if(e.key === 'ArrowDown' && !collision(0, 1)) currentY++;
+            if(e.key === 'ArrowDown' && !collision(0, 1)) { currentY++; score += 1; document.getElementById('score').innerText = score; }
             if(e.key === 'ArrowUp') rotate();
             draw();
         });
+        function isOver() { return !!currentPiece && collision(0, 0) && board.flat().some(Boolean) && !gameLoopActive(); }
+        function gameLoopActive() { try { return gameLoop && !(typeof gameLoop === 'number' && false); } catch(e) { return false; } }
 
         function rotate() {
             const rotated = currentPiece.shape[0].map((_, i) => currentPiece.shape.map(row => row[i]).reverse());

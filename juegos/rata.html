@@ -23,18 +23,8 @@
     <canvas id="game" width="400" height="400"></canvas>
     <a href="juegos.html">← Volver al Menú</a>
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-        import { getFirestore, addDoc, collection } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-
-        const firebaseConfig = { apiKey: "AIzaSyBmTBMyE7Y_LgSXH1SrmEv29DLYdxkyUEw", authDomain: "compartir-textos-app.firebaseapp.com", projectId: "compartir-textos-app", storageBucket: "compartir-textos-app.firebasestorage.app", messagingSenderId: "705083380628", appId: "1:705083380628:web:ce267570e09e3ef1b27581" };
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-
-        let currentUser = null;
-        onAuthStateChanged(auth, (user) => { if(user) currentUser = user; else window.location.href = '../index.html'; });
+    <script src="arcade-lib.js"></script>
+    <script>
 
         const canvas = document.getElementById('game');
         const ctx = canvas.getContext('2d');
@@ -47,12 +37,14 @@
         let ratas = [];
 
         class Rata {
-            constructor() {
-                this.size = 34 + Math.random() * 20;
+            constructor(fast) {
+                this.gold = Math.random() < 0.08;          // rata dorada: vale 3 puntos
+                this.size = (fast ? 22 : 34) + Math.random() * (this.gold ? 14 : 20);
                 this.x = Math.random() * (canvas.width - this.size);
                 this.y = Math.random() * (canvas.height - this.size);
-                this.vx = (Math.random() - 0.5) * 3;
-                this.vy = (Math.random() - 0.5) * 3;
+                const mul = fast ? 2.2 : 1;
+                this.vx = (Math.random() - 0.5) * 3 * mul;
+                this.vy = (Math.random() - 0.5) * 3 * mul;
                 this.life = 1; // se desvanece si no la atrapan
             }
             update() {
@@ -63,7 +55,7 @@
             }
             draw() {
                 ctx.font = `${this.size}px serif`;
-                ctx.fillText('🐀', this.x, this.y + this.size);
+                ctx.fillText(this.gold ? '✨' : '🐀', this.x, this.y + this.size);
             }
             contains(px, py) {
                 return px >= this.x && px <= this.x + this.size && py >= this.y && py <= this.y + this.size;
@@ -107,10 +99,13 @@
             const py = e.clientY - rect.top;
             for (let i = ratas.length - 1; i >= 0; i--) {
                 if (ratas[i].contains(px, py)) {
+                    const g = ratas[i].gold;
                     ratas.splice(i, 1);
-                    score++;
+                    score += g ? 3 : 1;
                     document.getElementById('score').innerText = score;
-                    ratas.push(new Rata());
+                    Arcade.beep(g ? 1400 : 700, .06, 'triangle', .12);
+                    // con el tiempo las ratas nuevas salen más rápidas
+                    ratas.push(new Rata(timeLeft < 15));
                     break;
                 }
             }
@@ -121,19 +116,19 @@
             clearInterval(gameInterval);
             clearInterval(timerInterval);
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'rgba(15,12,41,.8)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.textAlign = 'center';
             ctx.fillStyle = '#667eea';
             ctx.font = 'bold 28px Segoe UI';
-            ctx.textAlign = 'center';
-            ctx.fillText('¡Fin del juego!', canvas.width / 2, canvas.height / 2 - 20);
-            ctx.fillText(`Atrapaste ${score} ratas 🐀`, canvas.width / 2, canvas.height / 2 + 20);
-            if (currentUser && score > 0) {
-                addDoc(collection(db, "scores"), {
-                    userId: currentUser.uid,
-                    gameId: 'rata',
-                    score: score,
-                    timestamp: Date.now()
-                }).catch(e => console.log("Error guardando récord", e));
-            }
+            ctx.fillText('⏰ ¡Fin del tiempo!', canvas.width / 2, canvas.height / 2 - 30);
+            ctx.fillStyle = '#fff';
+            ctx.font = '20px Segoe UI';
+            ctx.fillText('Puntuación: ' + score + ' 🐀', canvas.width / 2, canvas.height / 2 + 8);
+            ctx.fillStyle = '#00f2fe';
+            ctx.font = '15px Segoe UI';
+            ctx.fillText('Pulsa INICIAR para otra ronda', canvas.width / 2, canvas.height / 2 + 42);
+            if (score > 0) Arcade.addScore(score);   // récord local al instante + nube
         }
 
         // pantalla inicial

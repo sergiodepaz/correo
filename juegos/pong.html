@@ -19,17 +19,8 @@
     <p style="color:#888; font-size:0.9rem;">Mueve el ratón verticalmente para controlar tu paleta</p>
     <a href="juegos.html">← Volver al Menú</a>
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-        import { getFirestore, addDoc, collection } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-
-        const firebaseConfig = { apiKey: "AIzaSyBmTBMyE7Y_LgSXH1SrmEv29DLYdxkyUEw", authDomain: "compartir-textos-app.firebaseapp.com", projectId: "compartir-textos-app", storageBucket: "compartir-textos-app.firebasestorage.app", messagingSenderId: "705083380628", appId: "1:705083380628:web:ce267570e09e3ef1b27581" };
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        let currentUser = null;
-        onAuthStateChanged(auth, (user) => { if(user) currentUser = user; else window.location.href = '../index.html'; });
+    <script src="arcade-lib.js"></script>
+        <script>
 
         const canvas = document.getElementById('game');
         const ctx = canvas.getContext('2d');
@@ -38,41 +29,72 @@
         let playerY = 160, aiY = 160;
         let ballX = 300, ballY = 200, ballDX = 4, ballDY = 4;
         let pScore = 0, aiScore = 0;
+        let running = true, paused = false, serveDelay = 0;
+        let keys = {};                          // paleta también con teclado
+        let touchY = null;
 
-        canvas.addEventListener('mousemove', e => {
+        function canvasY(clientY) {
             const rect = canvas.getBoundingClientRect();
-            playerY = e.clientY - rect.top - paddleH/2;
+            return (clientY - rect.top) * (canvas.height / rect.height) - paddleH/2;
+        }
+        canvas.addEventListener('mousemove', e => { playerY = canvasY(e.clientY); });
+        // táctil: arrastra el dedo para mover tu paleta
+        canvas.addEventListener('touchmove', e => { e.preventDefault(); playerY = canvasY(e.touches[0].clientY); }, {passive:false});
+        canvas.addEventListener('touchstart', e => { playerY = canvasY(e.touches[0].clientY); }, {passive:true});
+        document.addEventListener('keydown', e => { keys[e.key] = true; if(['ArrowUp','ArrowDown',' '].includes(e.key)) e.preventDefault();
+            if(e.key === ' ' && !running && pScore < 5 && aiScore < 5) { /* reinicio con espacio abajo */ }
+            if(e.key.toLowerCase() === 'p') { paused = !paused; Arcade.toast(paused ? '⏸ PAUSA (P)' : '▶ (P)'); }
         });
+        document.addEventListener('keyup', e => keys[e.key] = false);
 
         function update() {
-            // Movimiento bola
-            ballX += ballDX;
-            ballY += ballDY;
+            if (running && !paused) {
+                // teclado W/S o flechas
+                if(keys['ArrowUp'] || keys['w']) playerY -= 6;
+                if(keys['ArrowDown'] || keys['s']) playerY += 6;
+                playerY = Math.max(0, Math.min(canvas.height - paddleH, playerY));
 
-            // Rebote arriba/abajo
-            if(ballY <= 0 || ballY >= canvas.height) ballDY *= -1;
+                if (serveDelay > 0) serveDelay--;
+                else {
+                    ballX += ballDX;
+                    ballY += ballDY;
 
-            // IA simple
-            const aiCenter = aiY + paddleH/2;
-            if(aiCenter < ballY - 10) aiY += 3.5;
-            else if(aiCenter > ballY + 10) aiY -= 3.5;
+                    // Rebote arriba/abajo
+                    if(ballY <= 0 || ballY >= canvas.height) ballDY *= -1;
 
-            // Colisión paletas
-            if(ballX <= paddleW && ballY >= playerY && ballY <= playerY + paddleH) {
-                ballDX *= -1.1; // Aumenta velocidad
-                ballX = paddleW;
+                    // IA con dificultad justa: se acelera según el marcador, con tope
+                    const aiSpeed = Math.min(3.5 + aiScore * 0.3, 5.5);
+                    const aiCenter = aiY + paddleH/2;
+                    if(aiCenter < ballY - 12) aiY = Math.min(canvas.height - paddleH, aiY + aiSpeed);
+                    else if(aiCenter > ballY + 12) aiY = Math.max(0, aiY - aiSpeed);
+
+                    // Colisión paletas: ángulo según dónde golpee + tope de velocidad
+                    if(ballDX < 0 && ballX <= paddleW + 8 && ballY >= playerY - 6 && ballY <= playerY + paddleH + 6) {
+                        const rel = (ballY - (playerY + paddleH/2)) / (paddleH/2);
+                        const speed = Math.min(Math.hypot(ballDX, ballDY) * 1.06, 13);
+                        const ang = rel * 0.9;
+                        ballDX = Math.abs(Math.cos(ang) * speed);
+                        ballDY = Math.sin(ang) * speed;
+                        ballX = paddleW + 8;
+                        Arcade.beep(600, .04, 'square', .06);
+                    }
+                    if(ballDX > 0 && ballX >= canvas.width - paddleW - 8 && ballY >= aiY - 6 && ballY <= aiY + paddleH + 6) {
+                        const rel = (ballY - (aiY + paddleH/2)) / (paddleH/2);
+                        const speed = Math.min(Math.hypot(ballDX, ballDY) * 1.06, 13);
+                        const ang = rel * 0.9;
+                        ballDX = -Math.abs(Math.cos(ang) * speed);
+                        ballDY = Math.sin(ang) * speed;
+                        ballX = canvas.width - paddleW - 8;
+                        Arcade.beep(500, .04, 'square', .06);
+                    }
+
+                    // Puntuación
+                    if(ballX < -20) { aiScore++; resetBall(); }
+                    if(ballX > canvas.width + 20) { pScore++; resetBall(); }
+                }
             }
-            if(ballX >= canvas.width - paddleW && ballY >= aiY && ballY <= aiY + paddleH) {
-                ballDX *= -1.1;
-                ballX = canvas.width - paddleW;
-            }
-
-            // Puntuación
-            if(ballX < 0) { aiScore++; resetBall(); }
-            if(ballX > canvas.width) { pScore++; resetBall(); }
-
             draw();
-            requestAnimationFrame(update);
+            if (running) requestAnimationFrame(update);
         }
 
         function resetBall() {
@@ -85,9 +107,27 @@
             if(pScore >= 5 || aiScore >= 5) endGame();
         }
 
-        function draw() {
+        function draw(end, gano) {
             ctx.fillStyle = '#1a1a2e';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
+            if (end) {
+                ctx.fillStyle = 'rgba(0,0,0,.7)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.textAlign = 'center';
+                ctx.font = 'bold 34px Segoe UI';
+                ctx.fillStyle = gano ? '#4caf50' : '#ff5252';
+                ctx.fillText(gano ? '¡GANASTE!' : 'LA IA GANA', canvas.width/2, canvas.height/2);
+                ctx.textAlign = 'left';
+            }
+            if (paused && !end) {
+                ctx.fillStyle = 'rgba(0,0,0,.55)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.textAlign = 'center';
+                ctx.fillStyle = '#00f2fe';
+                ctx.font = 'bold 26px Segoe UI';
+                ctx.fillText('⏸ PAUSA', canvas.width/2, canvas.height/2);
+                ctx.textAlign = 'left';
+            }
             
             // Línea central
             ctx.setLineDash([5, 15]);
@@ -108,13 +148,16 @@
             ctx.fill();
         }
 
-        async function endGame() {
-            cancelAnimationFrame(update);
-            const msg = pScore >= 5 ? "¡Ganaste!" : "La IA gana.";
-            alert(msg);
-            if(currentUser && pScore > aiScore) {
-                await addDoc(collection(db, "scores"), { userId: currentUser.uid, gameId: 'pong', score: pScore * 100, timestamp: new Date() });
-            }
+        function endGame() {
+            running = false;
+            const gano = pScore >= 5;
+            Arcade.beep(gano ? 1000 : 160, .3, gano ? 'triangle' : 'sawtooth', .15);
+            draw(true, gano);
+            if (gano) Arcade.addScore(pScore * 100);
+            setTimeout(() => {
+                const again = confirm((gano ? '🏆 ¡GANASTE! ' : '😅 La IA gana. ') + '¿Jugar otra vez?');
+                if (again) location.reload();
+            }, 350);
         }
 
         update();
