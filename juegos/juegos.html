@@ -252,6 +252,25 @@
             padding: 60px 0;
             font-size: 1.1rem;
         }
+
+        /* ===== Tarjetas ocultables (menú + búsqueda) ===== */
+        .game-card.hidden-card { display: none; }
+        .cat-chip {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            background: rgba(0,0,0,0.55);
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: #fff;
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255,255,255,0.12);
+            z-index: 2;
+        }
     </style>
 </head>
 <body>
@@ -305,43 +324,58 @@
 
     // Catálogo de juegos (Fácil de expandir)
     const gamesCatalog = [
-        { id: 'snake', name: 'Snake Clásico', icon: '🐍', desc: 'El clásico juego de la serpiente. Come manzanas y no choques con tu cola.', file: 'snake.html' },
-        { id: 'clicker', name: 'Super Clicker', icon: '💰', desc: 'Haz clic para ganar monedas y compra mejoras automáticas. ¡Adictivo!', file: 'clicker.html' },
-        { id: 'memoria', name: 'Memoria Flash', icon: '🎴', desc: 'Encuentra todas las parejas de cartas en el menor tiempo posible.', file: 'memoria.html' },
-        { id: 'tetris', name: 'Tetris Block', icon: '🧩', desc: 'Encaja las piezas geométricas antes de que lleguen arriba.', file: 'tetris.html' },
-        { id: 'pong', name: 'Pong Retro', icon: '🏓', desc: 'Desafía a la IA en este clásico del tenis de mesa digital.', file: 'pong.html' },
-        { id: 'wordle', name: 'Adivina Palabra', icon: '🤬', desc: 'Tienes 6 intentos para adivinar la palabra secreta del día.', file: 'wordle.html' },
-        { id: 'sopas', name: 'Sopa de Letras Pro', icon: '🅿', desc: 'Encuentra palabras ocultas generadas dinámicamente por una IA de diccionario.', file: 'sopas.html' },
-        { id: 'rata', name: 'Atrapa la Rata', icon: '🐀', desc: 'Tienes 30 segundos para atrapar tantas ratas como puedas. ¡Corren por todo el tablero!', file: 'rata.html' },
-        { id: 'rompebricks', name: 'Rompe Ladrillos', icon: '🧱', desc: 'Clásico Breakout con ladrillos neón, partículas y niveles infinitos. ¡No dejes caer la bola!', file: 'rompebricks.html' },
-        { id: 'flappy', name: 'Flappy Sergio', icon: '🐤', desc: 'Un clic para aletear. Simpático, colorido... y brutalmente difícil. ¿Cuántos tubos aguantas?', file: 'flappy.html' },
-        { id: 'simon', name: 'Memoria Lumínica', icon: '🌈', desc: 'Simon Says con sonidos reales: repite la secuencia de colores antes de que tu memoria falle.', file: 'simon.html' },
-        { id: 'dosmilcuarenta', name: '2048 Neón', icon: '🔢', desc: 'Desliza y fusiona números hasta llegar a la legendaria casilla 2048 brillante.', file: 'dosmilcuarenta.html' },
-        { id: 'asteroides', name: 'Asteroides', icon: '☄️', desc: 'Pilota tu nave, esquiva y destroza asteroides que se dividen al recibir impactos.', file: 'asteroides.html' },
-        { id: 'minas', name: 'Buscaminas Neón', icon: '💣', desc: 'El clásico destapador de casillas con 3 dificultades y cronómetro. ¿Suerte o lógica?', file: 'minas.html' },
-        { id: 'reflejo', name: 'Reflejo de Colores', icon: '🎨', desc: 'Prueba de Stroop pura adrenalina: responde al COLOR de la palabra, no a lo que dice.', file: 'reflejo.html' },
-        { id: 'reaccion', name: 'Test de Reacción', icon: '⚡', desc: '¿Cuánto tardas en reaccionar? Mide tus reflejos en milisegundos y compite contra ti mismo.', file: 'reaccion.html' },
-        { id: 'punteria', name: 'Puntería Extrema', icon: '🎯', desc: '30 segundos, dianas que aparecen y desaparecen. Dispara al centro para sumar más puntos.', file: 'punteria.html' },
-        { id: 'memorianum', name: 'Memoria Numérica', icon: '🔢', desc: 'Memoriza la secuencia de números antes de que desaparezca y escríbela. Cada nivel añade un dígito.', file: 'memorianum.html' },
-        { id: 'objeto', name: 'Objeto Escondido', icon: '🕵️', desc: 'Encuentra el emoji buscado entre decenas de señuelos... algunos se camuflan en el fondo.', file: 'objeto.html' },
-        { id: 'run', name: 'Carrera Infinita', icon: '🏃', desc: 'Corre sin parar, salta obstáculos y aguanta los metros que puedas. ¡La velocidad no perdona!', file: 'run.html' },
-        { id: 'galaxia', name: 'Galaxia Sergio', icon: '🚀', desc: 'Defiende la galaxia de oleadas de enemigos. Potencia tu nave y bate tu récord estelar.', file: 'galaxia.html' },
-        { id: 'pongneon', name: 'Pong Neón', icon: '🌌', desc: 'La versión más brillante del clásico Pong: efectos neón, velocidad creciente y pura tensión.', file: 'pongneon.html' },
-        { id: 'whack', name: 'Whack-a-Mole', icon: '🔨', desc: 'Mazos a tiempo: golpea a los topillos antes de que vuelvan a esconderse. ¡Reflejos al límite!', file: 'whack.html' },
-        { id: 'topillos', name: 'Los Topillos', icon: '🐹', desc: 'La variante arcade de golpear topillos con combos y penalizaciones. ¿Cuántos atrapas?', file: 'topillos.html' },
-        { id: 'bubblepop', name: 'Explota Todo', icon: '🫧', desc: 'Une y revienta burbujas de colores antes de que la pantalla se llene. ¡Puras explosiones!', file: 'bubblepop.html' },
-        { id: 'colorrush', name: 'Color Rush', icon: '🌈', desc: 'A todo color: decide rápido si el nombre y el color coinciden. Cada error cuenta.', file: 'colorrush.html' },
-        { id: 'cuatro', name: 'Conecta 4 Loco', icon: '🔴', desc: 'El clásico Connect Four contra una IA traviesa. Alinea cuatro fichas para ganar.', file: 'cuatro.html' },
-        { id: 'matagato', name: 'Mate al Gato', icon: '🐱', desc: 'Versión turbo del tres en línea: vence a la IA antes de que el gato te venza a ti.', file: 'matagato.html' },
-        { id: 'reinas', name: '8 Reinas Locas', icon: '👑', desc: 'Coloca 8 reinas en el tablero sin que se ataquen entre sí. Pura lógica ajedrecística.', file: 'reinas.html' },
-        { id: 'sudoku', name: 'Sudoku Neón', icon: '🧮', desc: 'Rellena la rejilla respetando filas, columnas y bloques. Con pistas y estilo neón.', file: 'sudoku.html' },
-        { id: 'memoji', name: 'MEMOJI', icon: '🧠', desc: 'Memoriza emojis en pantalla y recuérdalos todos. Tu memoria puesta a prueba.', file: 'memoji.html' },
-        { id: 'ruleta', name: 'Ruleta Suicida', icon: '🎲', desc: 'Gira la ruleta y asume riesgos: suma puntos o lo pierdes todo. ¿Tienes agallas?', file: 'ruleta.html' },
-        { id: 'angry', name: 'Objetivo: Dinamita', icon: '🧨', desc: 'Apunta, calcula y haz estallar la dinamita en el momento justo. Explosión garantizada.', file: 'angry.html' },
-        { id: 'bus', name: 'Bus de la Suerte', icon: '🚌', desc: 'Un bus, muchas paradas y decisiones rápidas. Elige bien y llega a la meta sumando puntos.', file: 'bus.html' },
+        { id: 'snake', name: 'Snake Clásico', icon: '🐍', desc: 'El clásico juego de la serpiente. Come manzanas y no choques con tu cola.', file: 'snake.html' , cats: ['clasicos'] },
+        { id: 'clicker', name: 'Super Clicker', icon: '💰', desc: 'Haz clic para ganar monedas y compra mejoras automáticas. ¡Adictivo!', file: 'clicker.html' , cats: ['accion'] },
+        { id: 'memoria', name: 'Memoria Flash', icon: '🎴', desc: 'Encuentra todas las parejas de cartas en el menor tiempo posible.', file: 'memoria.html' , cats: ['mentes'] },
+        { id: 'tetris', name: 'Tetris Block', icon: '🧩', desc: 'Encaja las piezas geométricas antes de que lleguen arriba.', file: 'tetris.html' , cats: ['clasicos'] },
+        { id: 'pong', name: 'Pong Retro', icon: '🏓', desc: 'Desafía a la IA en este clásico del tenis de mesa digital.', file: 'pong.html' , cats: ['clasicos','reflejos'] },
+        { id: 'wordle', name: 'Adivina Palabra', icon: '🤬', desc: 'Tienes 6 intentos para adivinar la palabra secreta del día.', file: 'wordle.html' , cats: ['mentes'] },
+        { id: 'sopas', name: 'Sopa de Letras Pro', icon: '🅿', desc: 'Encuentra palabras ocultas generadas dinámicamente por una IA de diccionario.', file: 'sopas.html' , cats: ['mentes'] },
+        { id: 'rata', name: 'Atrapa la Rata', icon: '🐀', desc: 'Tienes 30 segundos para atrapar tantas ratas como puedas. ¡Corren por todo el tablero!', file: 'rata.html' , cats: ['reflejos','caos'] },
+        { id: 'rompebricks', name: 'Rompe Ladrillos', icon: '🧱', desc: 'Clásico Breakout con ladrillos neón, partículas y niveles infinitos. ¡No dejes caer la bola!', file: 'rompebricks.html' , cats: ['clasicos','accion'] },
+        { id: 'flappy', name: 'Flappy Sergio', icon: '🐤', desc: 'Un clic para aletear. Simpático, colorido... y brutalmente difícil. ¿Cuántos tubos aguantas?', file: 'flappy.html' , cats: ['reflejos','accion'] },
+        { id: 'simon', name: 'Memoria Lumínica', icon: '🌈', desc: 'Simon Says con sonidos reales: repite la secuencia de colores antes de que tu memoria falle.', file: 'simon.html' , cats: ['mentes'] },
+        { id: 'dosmilcuarenta', name: '2048 Neón', icon: '🔢', desc: 'Desliza y fusiona números hasta llegar a la legendaria casilla 2048 brillante.', file: 'dosmilcuarenta.html' , cats: ['mentes'] },
+        { id: 'asteroides', name: 'Asteroides', icon: '☄️', desc: 'Pilota tu nave, esquiva y destroza asteroides que se dividen al recibir impactos.', file: 'asteroides.html' , cats: ['clasicos','accion'] },
+        { id: 'minas', name: 'Buscaminas Neón', icon: '💣', desc: 'El clásico destapador de casillas con 3 dificultades y cronómetro. ¿Suerte o lógica?', file: 'minas.html' , cats: ['mentes'] },
+        { id: 'reflejo', name: 'Reflejo de Colores', icon: '🎨', desc: 'Prueba de Stroop pura adrenalina: responde al COLOR de la palabra, no a lo que dice.', file: 'reflejo.html' , cats: ['reflejos'] },
+        { id: 'reaccion', name: 'Test de Reacción', icon: '⚡', desc: '¿Cuánto tardas en reaccionar? Mide tus reflejos en milisegundos y compite contra ti mismo.', file: 'reaccion.html' , cats: ['reflejos'] },
+        { id: 'punteria', name: 'Puntería Extrema', icon: '🎯', desc: '30 segundos, dianas que aparecen y desaparecen. Dispara al centro para sumar más puntos.', file: 'punteria.html' , cats: ['reflejos','nuevos'] },
+        { id: 'memorianum', name: 'Memoria Numérica', icon: '🔢', desc: 'Memoriza la secuencia de números antes de que desaparezca y escríbela. Cada nivel añade un dígito.', file: 'memorianum.html' , cats: ['mentes','nuevos'] },
+        { id: 'objeto', name: 'Objeto Escondido', icon: '🕵️', desc: 'Encuentra el emoji buscado entre decenas de señuelos... algunos se camuflan en el fondo.', file: 'objeto.html' , cats: ['reflejos','nuevos'] },
+        { id: 'run', name: 'Carrera Infinita', icon: '🏃', desc: 'Corre sin parar, salta obstáculos y aguanta los metros que puedas. ¡La velocidad no perdona!', file: 'run.html' , cats: ['reflejos','accion'] },
+        { id: 'galaxia', name: 'Galaxia Sergio', icon: '🚀', desc: 'Defiende la galaxia de oleadas de enemigos. Potencia tu nave y bate tu récord estelar.', file: 'galaxia.html' , cats: ['accion'] },
+        { id: 'pongneon', name: 'Pong Neón', icon: '🌌', desc: 'La versión más brillante del clásico Pong: efectos neón, velocidad creciente y pura tensión.', file: 'pongneon.html' , cats: ['reflejos','clasicos'] },
+        { id: 'whack', name: 'Whack-a-Mole', icon: '🔨', desc: 'Mazos a tiempo: golpea a los topillos antes de que vuelvan a esconderse. ¡Reflejos al límite!', file: 'whack.html' , cats: ['reflejos','caos'] },
+        { id: 'topillos', name: 'Los Topillos', icon: '🐹', desc: 'La variante arcade de golpear topillos con combos y penalizaciones. ¿Cuántos atrapas?', file: 'topillos.html' , cats: ['reflejos','caos'] },
+        { id: 'bubblepop', name: 'Explota Todo', icon: '🫧', desc: 'Une y revienta burbujas de colores antes de que la pantalla se llene. ¡Puras explosiones!', file: 'bubblepop.html' , cats: ['caos','reflejos'] },
+        { id: 'colorrush', name: 'Color Rush', icon: '🌈', desc: 'A todo color: decide rápido si el nombre y el color coinciden. Cada error cuenta.', file: 'colorrush.html' , cats: ['reflejos','caos'] },
+        { id: 'cuatro', name: 'Conecta 4 Loco', icon: '🔴', desc: 'El clásico Connect Four contra una IA traviesa. Alinea cuatro fichas para ganar.', file: 'cuatro.html' , cats: ['mentes','clasicos'] },
+        { id: 'matagato', name: 'Mate al Gato', icon: '🐱', desc: 'Versión turbo del tres en línea: vence a la IA antes de que el gato te venza a ti.', file: 'matagato.html' , cats: ['mentes','clasicos'] },
+        { id: 'reinas', name: '8 Reinas Locas', icon: '👑', desc: 'Coloca 8 reinas en el tablero sin que se ataquen entre sí. Pura lógica ajedrecística.', file: 'reinas.html' , cats: ['mentes'] },
+        { id: 'sudoku', name: 'Sudoku Neón', icon: '🧮', desc: 'Rellena la rejilla respetando filas, columnas y bloques. Con pistas y estilo neón.', file: 'sudoku.html' , cats: ['mentes'] },
+        { id: 'memoji', name: 'MEMOJI', icon: '🧠', desc: 'Memoriza emojis en pantalla y recuérdalos todos. Tu memoria puesta a prueba.', file: 'memoji.html' , cats: ['mentes','nuevos'] },
+        { id: 'ruleta', name: 'Ruleta Suicida', icon: '🎲', desc: 'Gira la ruleta y asume riesgos: suma puntos o lo pierdes todo. ¿Tienes agallas?', file: 'ruleta.html' , cats: ['caos'] },
+        { id: 'angry', name: 'Objetivo: Dinamita', icon: '🧨', desc: 'Apunta, calcula y haz estallar la dinamita en el momento justo. Explosión garantizada.', file: 'angry.html' , cats: ['accion','caos'] },
+        { id: 'bus', name: 'Bus de la Suerte', icon: '🚌', desc: 'Un bus, muchas paradas y decisiones rápidas. Elige bien y llega a la meta sumando puntos.', file: 'bus.html' , cats: ['caos'] },
     ];
 
     let currentUser = null;
+    let activeCat = 'todos';   // Categoría seleccionada en el menú
+    let searchTerm = '';        // Texto del buscador
+
+    // Metadatos de categorías (para etiquetas y contadores del menú)
+    const catMeta = {
+        nuevos:   { label: '✨ Novedades' },
+        accion:   { label: '💥 Acción' },
+        reflejos: { label: '⚡ Reflejos' },
+        mentes:   { label: '🧠 Para Mentes' },
+        caos:     { label: '🤪 Caos Total' },
+        clasicos: { label: '👴 Clásicos' },
+    };
+
+    // Normaliza texto: minúsculas y sin tildes (buscar "memoria" encuentra "Memoria Flash")
+    const normalize = str => (str || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
     onAuthStateChanged(auth, async (user) => {
         if (!user) {
@@ -350,6 +384,7 @@
         }
         currentUser = user;
         await renderGames();
+        setupMenuAndSearch();
     });
 
     async function renderGames() {
@@ -370,17 +405,30 @@
             });
         } catch (e) { console.log("No hay récords aún"); }
 
+        // Mensaje de resultados vacíos (búsqueda sin coincidencias)
+        const emptyMsg = document.createElement('div');
+        emptyMsg.className = 'empty-msg';
+        emptyMsg.id = 'emptyMsg';
+        emptyMsg.style.display = 'none';
+        emptyMsg.textContent = '😶 No se encontró ningún juego con esa búsqueda.';
+
         // Generar tarjetas con animación escalonada
         gamesCatalog.forEach((game, index) => {
             const highScore = scoresMap[game.id] || 0;
             const scoreText = highScore > 0 ? `🏆 ${highScore.toLocaleString()}` : 'Sin récord';
-            
+
+            const primaryCat = game.cats && game.cats.length ? game.cats[0] : null;
+            const chipHtml = primaryCat ? `<div class="cat-chip">${catMeta[primaryCat].label}</div>` : '';
+
             const card = document.createElement('div');
             card.className = 'game-card';
-            card.style.animation = `fadeInUp 0.5s ease forwards ${index * 0.1}s`;
+            card.dataset.cat = (game.cats || []).join(',');
+            card.dataset.search = normalize(`${game.name} ${game.desc} ${game.id}`);
+            card.style.animation = `fadeInUp 0.5s ease forwards ${Math.min(index, 12) * 0.05}s`;
             card.style.opacity = '0'; // Inicialmente invisible para la animación
-            
+
             card.innerHTML = `
+                ${chipHtml}
                 <div class="score-badge">${scoreText}</div>
                 <div class="game-thumb">${game.icon}</div>
                 <div class="game-info">
@@ -392,6 +440,9 @@
             container.appendChild(card);
         });
 
+        container.appendChild(emptyMsg);
+        applyFilters();
+
         // Añadir keyframes dinámicamente para la animación de entrada
         const styleSheet = document.createElement("style");
         styleSheet.innerText = `
@@ -401,6 +452,79 @@
             }
         `;
         document.head.appendChild(styleSheet);
+    }
+
+    // ===== Menú de categorías + búsqueda =====
+    function setupMenuAndSearch() {
+        const menu = document.getElementById('catMenu');
+        const buscador = document.getElementById('buscador');
+
+        // Contador de juegos por categoría en cada botón del menú
+        menu.querySelectorAll('.cat-btn').forEach(btn => {
+            const cat = btn.dataset.cat;
+            const count = cat === 'todos'
+                ? gamesCatalog.length
+                : gamesCatalog.filter(g => (g.cats || []).includes(cat)).length;
+            btn.textContent = `${btn.textContent} (${count})`;
+            btn.setAttribute('aria-pressed', btn.classList.contains('active') ? 'true' : 'false');
+        });
+
+        // Clic + navegación por teclado entre botones (← → Inicio Fin)
+        const buttons = Array.from(menu.querySelectorAll('.cat-btn'));
+        buttons.forEach((btn, i) => {
+            btn.addEventListener('click', () => selectCat(btn));
+            btn.addEventListener('keydown', e => {
+                let k = null;
+                if (e.key === 'ArrowRight') k = (i + 1) % buttons.length;
+                else if (e.key === 'ArrowLeft') k = (i - 1 + buttons.length) % buttons.length;
+                else if (e.key === 'Home') k = 0;
+                else if (e.key === 'End') k = buttons.length - 1;
+                if (k !== null) { e.preventDefault(); buttons[k].focus(); buttons[k].click(); }
+            });
+        });
+
+        // Búsqueda en vivo (nombre, descripción e id; sin distinguir mayúsculas ni tildes)
+        buscador.addEventListener('input', () => {
+            searchTerm = normalize(buscador.value.trim());
+            applyFilters();
+        });
+        // Escape limpia la búsqueda
+        buscador.addEventListener('keydown', e => {
+            if (e.key === 'Escape') { buscador.value = ''; searchTerm = ''; applyFilters(); }
+        });
+    }
+
+    function selectCat(btn) {
+        activeCat = btn.dataset.cat;
+        document.querySelectorAll('#catMenu .cat-btn').forEach(b => {
+            const isActive = b === btn;
+            b.classList.toggle('active', isActive);
+            b.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+        });
+        applyFilters();
+    }
+
+    function applyFilters() {
+        const cards = document.querySelectorAll('#games-container .game-card');
+        let visible = 0;
+        cards.forEach(card => {
+            const cats = card.dataset.cat ? card.dataset.cat.split(',') : [];
+            const matchCat = activeCat === 'todos' || cats.includes(activeCat);
+            const matchSearch = !searchTerm || card.dataset.search.includes(searchTerm);
+            const show = matchCat && matchSearch;
+            card.classList.toggle('hidden-card', !show);
+            if (show) visible++;
+        });
+
+        const counter = document.getElementById('gameCount');
+        if (counter) {
+            counter.textContent = (activeCat === 'todos' && !searchTerm)
+                ? `${visible} juegos`
+                : `${visible} de ${cards.length} juegos`;
+        }
+
+        const empty = document.getElementById('emptyMsg');
+        if (empty) empty.style.display = visible === 0 ? '' : 'none';
     }
 </script>
 </body>

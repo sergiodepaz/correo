@@ -114,7 +114,9 @@ function endRun(t,m){ running=false; $('endTitle').innerText=t; $('endMsg').inne
 let running=false,lastTs=0;
 function loop(ts){ if(!running)return; const dt=Math.min(.033,(ts-lastTs)/1000); lastTs=ts; update(dt); draw(); if(running)requestAnimationFrame(loop); }
 if(typeof reset==='function')reset();
-drawScene?.();
+// render inicial del tablero/escena
+if(typeof draw==='function')try{draw()}catch(e){}
+if(typeof render==='function')try{render()}catch(e){}
 </script>
 </body>
 </html>
