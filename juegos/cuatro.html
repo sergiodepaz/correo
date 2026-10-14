@@ -72,6 +72,10 @@ onAuthStateChanged(auth,u=>{ if(u){currentUser=u;loadBest();} });
 // ===== CONECTA 4 LOCO (con bombas 💣 y tornados 🌪️) =====
 const COLS=7,ROWS=6,EMPTY=0;
 let B,over=false,wins=0,losses=0,hoverCol=-1,shake=0,busy=false;
+// overlays fuera del tablero para que no se solapen con el juego
+document.querySelector('.wrap').insertAdjacentHTML('beforeend',
+  '<div class="overlay" id="ovStart"><h2>🔴 CONECTA 4 LOCO</h2><p>Conecta 4 contra una IA tramposa... porque tú también tienes trampas: 💣 bomba (destruye 3x3) y 🌪️ tornado (baraja una columna). Primer jugador en ganar 5 partidas se lleva el récord.</p><button class="btn-neon" id="btnStart">▶ JUGAR</button></div>'+
+  '<div class="overlay" id="ovEnd" style="display:none"><h2 id="endTitle">💥 ¡FIN!</h2><p id="endMsg"></p><button class="btn-neon" id="btnAgain">🔄 OTRA PARTIDA</button></div>');
 document.getElementById('gc').innerHTML='<div id="pick"></div><canvas id="cv2" width="560" height="480"></canvas>';
 const pick=document.getElementById('pick');
 const cv2=document.getElementById('cv2'),ctx2=cv2.getContext('2d');
@@ -158,7 +162,8 @@ function endRun(t,m){ running=false; $('endTitle').innerText=t; $('endMsg').inne
 let running=false,lastTs=0;
 function loop(ts){ if(!running)return; const dt=Math.min(.033,(ts-lastTs)/1000); lastTs=ts; update(dt); draw(); if(running)requestAnimationFrame(loop); }
 if(typeof reset==='function')reset();
-drawScene?.();
+// render inicial de la escena
+if(typeof draw==='function')try{draw()}catch(e){}
 </script>
 </body>
 </html>

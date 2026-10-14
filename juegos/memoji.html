@@ -73,6 +73,10 @@ onAuthStateChanged(auth,u=>{ if(u){currentUser=u;loadBest();} });
 const EMO=['🍕','🐸','🚀','🎩','🐙','🍩','⚡','🌵','🦄','🍿','🎲','🐧','🌮','👾','🎸','🍄','🐝','🔥','❄️','🌙','🥑','🎯','🐳','🍭'];
 const LV=[{n:'FÁCIL',pairs:6,time:45,cols:4},{n:'NORMAL',pairs:8,time:50,cols:4},{n:'DIFÍCIL',pairs:10,time:55,cols:5},{n:'IMPOSIBLE',pairs:12,time:60,cols:6}];
 let lv=0,cards=[],first=null,lock=false,pairs=0,pts=0,timeLeft=60,moves=0;
+// overlays fuera del tablero para que no se solapen con el juego
+document.querySelector('.wrap').insertAdjacentHTML('beforeend',
+  '<div class="overlay" id="ovStart"><h2>🃏 MEMOJI</h2><p>Encuentra las parejas de emojis contrarreloj. Cada pareja te regala +4 segundos; si el reloj muere, mueres tú. 4 niveles hasta el IMPOSIBLE.</p><button class="btn-neon" id="btnStart">▶ MEMORIZAR</button></div>'+
+  '<div class="overlay" id="ovEnd" style="display:none"><h2 id="endTitle">💥 ¡FIN!</h2><p id="endMsg"></p><button class="btn-neon" id="btnAgain">🔄 OTRA PARTIDA</button></div>');
 document.getElementById('gc').innerHTML='<div id="lvlbar"></div><div id="board"></div>';
 const lvlbar=document.getElementById('lvlbar'), board=document.getElementById('board');
 lvlbar.style.cssText='display:flex;gap:8px;justify-content:center;margin-bottom:14px;flex-wrap:wrap';
@@ -128,7 +132,8 @@ function endRun(t,m){ running=false; $('endTitle').innerText=t; $('endMsg').inne
 let running=false,lastTs=0;
 function loop(ts){ if(!running)return; const dt=Math.min(.033,(ts-lastTs)/1000); lastTs=ts; update(dt); draw(); if(running)requestAnimationFrame(loop); }
 if(typeof reset==='function')reset();
-drawScene?.();
+// render inicial de la escena
+if(typeof draw==='function')try{draw()}catch(e){}
 </script>
 </body>
 </html>

@@ -70,6 +70,10 @@ async function loadBest(){ if(!currentUser)return; try{
 onAuthStateChanged(auth,u=>{ if(u){currentUser=u;loadBest();} });
 
 // ===== 8 REINAS LOCAS =====
+// overlays fuera del tablero para que no se solapen con el juego
+document.querySelector('.wrap').insertAdjacentHTML('beforeend',
+  '<div class="overlay" id="ovStart"><h2>👑 8 REINAS LOCAS</h2><p>Coloca las 8 reinas sin que se coman entre sí, pero hay casillas minadas 💣, reinas fijas y un cronómetro que no perdona. Pulsa H (o botón pista) para revelar una reina correcta: cuesta 150 pts.</p><button class="btn-neon" id="btnStart">▶ COLOCAR</button></div>'+
+  '<div class="overlay" id="ovEnd" style="display:none"><h2 id="endTitle">💥 ¡FIN!</h2><p id="endMsg"></p><button class="btn-neon" id="btnAgain">🔄 OTRA PARTIDA</button></div>');
 document.getElementById('gc').innerHTML='<div id="lvlbar"></div><div id="board"></div>';
 const lvlbar=document.getElementById('lvlbar'),board=document.getElementById('board');
 const SOLS=[[0,4,7,5,2,6,1,3],[0,5,7,2,6,3,1,4],[1,4,7,5,2,0,6,3],[1,7,5,2,0,6,4,3],[2,4,6,0,3,1,7,5],[2,5,7,0,3,6,4,1],[4,0,3,1,7,5,2,6],[6,2,7,1,3,5,0,4]];
@@ -142,7 +146,8 @@ function endRun(t,m){ running=false; $('endTitle').innerText=t; $('endMsg').inne
 let running=false,lastTs=0;
 function loop(ts){ if(!running)return; const dt=Math.min(.033,(ts-lastTs)/1000); lastTs=ts; update(dt); draw(); if(running)requestAnimationFrame(loop); }
 if(typeof reset==='function')reset();
-drawScene?.();
+// render inicial de la escena
+if(typeof draw==='function')try{draw()}catch(e){}
 </script>
 </body>
 </html>

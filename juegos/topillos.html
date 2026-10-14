@@ -70,6 +70,10 @@ async function loadBest(){ if(!currentUser)return; try{
 onAuthStateChanged(auth,u=>{ if(u){currentUser=u;loadBest();} });
 
 // ===== LOS TOPILLOS (whack-a-mole) =====
+// overlays fuera del tablero para que no se solapen con el juego
+document.querySelector('.wrap').insertAdjacentHTML('beforeend',
+  '<div class="overlay" id="ovStart"><h2>🔨 LOS TOPILLOS</h2><p>60 segundos de puro mazazo: hámsters +10, brillantes ✨ +50... y si pegas a un erizo 🦔 pierdes 30 puntos y el combo. Cada golpe seguido sube el multiplicador.</p><button class="btn-neon" id="btnStart">▶ ¡A GOLPEAR!</button></div>'+
+  '<div class="overlay" id="ovEnd" style="display:none"><h2 id="endTitle">💥 ¡FIN!</h2><p id="endMsg"></p><button class="btn-neon" id="btnAgain">🔄 OTRA PARTIDA</button></div>');
 document.getElementById('gc').innerHTML='<div id="grid"></div>';
 const gridEl=document.getElementById('grid');
 gridEl.style.cssText='display:grid;grid-template-columns:repeat(3,1fr);gap:14px;width:min(92vw,460px)';
@@ -116,7 +120,8 @@ function endRun(t,m){ running=false; $('endTitle').innerText=t; $('endMsg').inne
 let running=false,lastTs=0;
 function loop(ts){ if(!running)return; const dt=Math.min(.033,(ts-lastTs)/1000); lastTs=ts; update(dt); draw(); if(running)requestAnimationFrame(loop); }
 if(typeof reset==='function')reset();
-drawScene?.();
+// render inicial de la escena
+if(typeof draw==='function')try{draw()}catch(e){}
 </script>
 </body>
 </html>
