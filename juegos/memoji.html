@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MEMOJI - Sergio's Arcade</title>
+<link rel="stylesheet" href="arcade.css">
+<style>
+  #gc { position:relative; }
+  canvas { display:block; }
+  .overlay { background:rgba(15,12,41,.85); border-radius:14px; backdrop-filter:blur(6px); z-index:5; }
+  .keys { margin-top:12px; color:var(--muted); font-size:.9rem; text-align:center; line-height:1.6; }
+  kbd { background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.25); border-bottom-width:3px; border-radius:6px; padding:2px 8px; font-weight:700; color:#fff; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hud"><span>🎴 Parejas<b id="pr">0/6</b></span><span>⏱️<b id="clock">45</b></span><span>⭐ Puntos<b id="pts">0</b></span><span>🏆 Récord<b id="best">—</b></span></div>
+  <div id="gc">
+    <canvas id="cv" width="760" height="440"></canvas>
+    <div class="overlay" id="ovStart">
+      <h2>🃏 MEMOJI</h2>
+      <p>Encuentra las parejas de emojis contrarreloj. Cada pareja te regala +4 segundos; si el reloj muere, mueres tú. 4 niveles hasta el IMPOSIBLE.</p>
+      <button class="btn-neon" id="btnStart">▶ MEMORIZAR</button>
+    </div>
+    <div class="overlay" id="ovEnd" style="display:none">
+      <h2 id="endTitle">💥 ¡FIN!</h2>
+      <p id="endMsg"></p>
+      <button class="btn-neon" id="btnAgain">🔄 OTRA PARTIDA</button>
+    </div>
+  </div>
+  <div class="keys">Clic/toca para voltear cartas · Encuentra todas las parejas antes de que se acabe el tiempo</div>
+  <a href="juegos.html" class="back">← Volver al catálogo</a>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getFirestore, collection, query, where, getDocs, addDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBmTBMyE7Y_LgSXH1SrmEv29DLYdxkyUEw",
+  authDomain: "compartir-textos-app.firebaseapp.com",
+  projectId: "compartir-textos-app",
+  storageBucket: "compartir-textos-app.firebasestorage.app",
+  messagingSenderId: "705083380628",
+  appId: "1:705083380628:web:ce267570e09e3ef1b27581"
+};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+let currentUser = null;
+const GAME_ID='memoji';
+
+let AC=null;
+function beep(f,d=.08,type='square',v=.12){ try{ AC=AC||new (window.AudioContext||window.webkitAudioContext)(); const o=AC.createOscillator(),g=AC.createGain(); o.type=type;o.frequency.value=f;g.gain.setValueAtTime(v,AC.currentTime);g.gain.exponentialRampToValueAtTime(.001,AC.currentTime+d);o.connect(g).connect(AC.destination);o.start();o.stop(AC.currentTime+d);}catch(e){} }
+
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+const W=cv.width, H=cv.height;
+const $=id=>document.getElementById(id);
+const rnd=(a,b)=>a+Math.random()*(b-a);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+
+async function loadBest(){ if(!currentUser)return; try{
+  const snap=await getDocs(query(collection(db,"scores"),where("userId","==",currentUser.uid),where("gameId","==",GAME_ID)));
+  let m=0; snap.forEach(d=>{ if(d.data().score>m) m=d.data().score; });
+  if(m>0)$('best').innerText=m.toLocaleString();
+}catch(e){} }
+
+onAuthStateChanged(auth,u=>{ if(u){currentUser=u;loadBest();} });
+
+// ===== MEMOJI (memoria contrarreloj) =====
+const EMO=['🍕','🐸','🚀','🎩','🐙','🍩','⚡','🌵','🦄','🍿','🎲','🐧','🌮','👾','🎸','🍄','🐝','🔥','❄️','🌙','🥑','🎯','🐳','🍭'];
+const LV=[{n:'FÁCIL',pairs:6,time:45,cols:4},{n:'NORMAL',pairs:8,time:50,cols:4},{n:'DIFÍCIL',pairs:10,time:55,cols:5},{n:'IMPOSIBLE',pairs:12,time:60,cols:6}];
+let lv=0,cards=[],first=null,lock=false,pairs=0,pts=0,timeLeft=60,moves=0;
+document.getElementById('gc').innerHTML='<div id="lvlbar"></div><div id="board"></div>';
+const lvlbar=document.getElementById('lvlbar'), board=document.getElementById('board');
+lvlbar.style.cssText='display:flex;gap:8px;justify-content:center;margin-bottom:14px;flex-wrap:wrap';
+LV.forEach((l,i)=>{const b=document.createElement('button');b.textContent=l.n;
+ b.style.cssText='padding:8px 14px;border-radius:20px;font-weight:700;font-size:.8rem;cursor:pointer;background:rgba(255,255,255,.07);color:#b0b0d0;border:1px solid rgba(255,255,255,.15)';
+ b.onclick=()=>{lv=i;startGame();};lvlbar.appendChild(b);});
+function setOn(){[...lvlbar.children].forEach((b,i)=>{b.style.background=i===lv?'linear-gradient(90deg,#667eea,#00f2fe)':'rgba(255,255,255,.07)';b.style.color=i===lv?'#04121f':'#b0b0d0';});}
+function startGame(){ setOn();
+  const l=LV[lv]; pairs=0;pts=0;moves=0;timeLeft=l.time;first=null;lock=false;
+  const picks=EMO.slice().sort(()=>Math.random()-.5).slice(0,l.pairs);
+  cards=(picks.concat(picks)).sort(()=>Math.random()-.5).map(e=>({e,up:false,done:false}));
+  board.style.display='grid';
+  board.style.gridTemplateColumns=`repeat(${l.cols},minmax(0,1fr))`; board.style.gap='10px'; board.style.width='min(92vw,520px)';
+  board.innerHTML='';
+  cards.forEach((c,i)=>{ const el=document.createElement('div');
+    el.style.cssText='aspect-ratio:3/4;border-radius:12px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:clamp(1.6rem,6vw,2.4rem);background:linear-gradient(135deg,#667eea,#764ba2);border:1px solid rgba(255,255,255,.2);transition:background .2s;user-select:none';
+    el.textContent='❔'; c.el=el; el.onclick=()=>flip(i); board.appendChild(el); });
+  upd(); $('ovStart').style.display='none'; $('ovEnd').style.display='none';
+  if(!running){running=true;lastTs=performance.now();requestAnimationFrame(loop);}
+}
+function flip(i){ if(lock||!running)return; const c=cards[i]; if(c.done||c.up)return;
+  c.up=true; c.el.textContent=c.e; c.el.style.background='rgba(255,255,255,.12)'; beep(700,.05,'triangle'); moves++;
+  if(!first){first=i;return;}
+  const f=cards[first]; first=null;
+  if(f.e===c.e){ f.done=c.done=true; pairs++; pts+=100; timeLeft+=4;
+    [f.el,c.el].forEach(el=>{el.style.background='rgba(61,255,142,.25)';el.style.borderColor='#3dff8e';});
+    beep(1000,.08);beep(1400,.1); upd();
+    if(pairs===LV[lv].pairs)win();
+  } else { lock=true;
+    setTimeout(()=>{ [f,c].forEach(cc=>{ if(!cc.done){cc.up=false;cc.el.textContent='❔';cc.el.style.background='linear-gradient(135deg,#667eea,#764ba2)';} }); lock=false; },700);
+    beep(250,.1,'sawtooth');
+  }
+  upd();
+}
+function win(){ const bonus=Math.round(Math.max(0,timeLeft)*20); pts+=bonus;
+  addScore(pts); running=false;
+  endRun('🧠 MENTE DE ACERO',`${LV[lv].n} completado en ${moves} movimientos · BONUS +${bonus} · Total ${pts}`);
+  beep(880,.12);beep(1100,.12);beep(1500,.2);
+}
+function upd(){ $('pr').innerText=pairs+'/'+LV[lv].pairs; $('clock').innerText=Math.ceil(timeLeft); $('pts').innerText=pts; }
+function reset(){ startGame(); }
+function update(dt){ if(!running)return; timeLeft-=dt; upd();
+  if(timeLeft<=0){running=false;addScore(pts);endRun('⏰ SIN TIEMPO',`Encontraste ${pairs} parejas · ${pts} puntos`);} }
+function draw(){}
+function addScore(n){ if(currentUser&&n>0)addDoc(collection(db,"scores"),{userId:currentUser.uid,gameId:GAME_ID,score:n,timestamp:new Date()}).then(loadBest).catch(()=>{}); }
+
+
+// lazos comunes de UI
+$('btnStart').onclick=()=>start();
+$('btnAgain').onclick=()=>start();
+function start(){ $('ovStart').style.display='none'; $('ovEnd').style.display='none'; reset(); running=true; lastTs=performance.now(); requestAnimationFrame(loop); }
+function endRun(t,m){ running=false; $('endTitle').innerText=t; $('endMsg').innerText=m; $('ovEnd').style.display='flex'; beep(140,.3,'sawtooth'); beep(90,.4,'sawtooth'); }
+let running=false,lastTs=0;
+function loop(ts){ if(!running)return; const dt=Math.min(.033,(ts-lastTs)/1000); lastTs=ts; update(dt); draw(); if(running)requestAnimationFrame(loop); }
+if(typeof reset==='function')reset();
+drawScene?.();
+</script>
+</body>
+</html>

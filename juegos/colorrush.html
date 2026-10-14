@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Color Rush - Sergio's Arcade</title>
+<link rel="stylesheet" href="arcade.css">
+<style>
+  #gc { position:relative; }
+  canvas { display:block; }
+  .overlay { background:rgba(15,12,41,.85); border-radius:14px; backdrop-filter:blur(6px); z-index:5; }
+  .keys { margin-top:12px; color:var(--muted); font-size:.9rem; text-align:center; line-height:1.6; }
+  kbd { background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.25); border-bottom-width:3px; border-radius:6px; padding:2px 8px; font-weight:700; color:#fff; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hud"><span>⭐ Puntos<b id="pts">0</b></span><span>🔥 Combo<b id="cmb">x1</b></span><span>⏱️<b id="tleft">60</b></span><span>🏆 Récord<b id="best">—</b></span></div>
+  <div id="gc">
+    <canvas id="cv" width="760" height="440"></canvas>
+    <div class="overlay" id="ovStart">
+      <h2>🎯 COLOR RUSH</h2>
+      <p>Revienta TODAS las burbujas del color objetivo. El nombre dentro de cada burbuja MIENTRE a propósito: fíjate en el color real. Limpiar toda una oleada da bonus masivo.</p>
+      <button class="btn-neon" id="btnStart">▶ EMPEZAR</button>
+    </div>
+    <div class="overlay" id="ovEnd" style="display:none">
+      <h2 id="endTitle">💥 ¡FIN!</h2>
+      <p id="endMsg"></p>
+      <button class="btn-neon" id="btnAgain">🔄 OTRA PARTIDA</button>
+    </div>
+  </div>
+  <div class="keys">Toca todas las burbujas del color pedido · ¡los nombres mienten!</div>
+  <a href="juegos.html" class="back">← Volver al catálogo</a>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getFirestore, collection, query, where, getDocs, addDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBmTBMyE7Y_LgSXH1SrmEv29DLYdxkyUEw",
+  authDomain: "compartir-textos-app.firebaseapp.com",
+  projectId: "compartir-textos-app",
+  storageBucket: "compartir-textos-app.firebasestorage.app",
+  messagingSenderId: "705083380628",
+  appId: "1:705083380628:web:ce267570e09e3ef1b27581"
+};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+let currentUser = null;
+const GAME_ID='colorrush';
+
+let AC=null;
+function beep(f,d=.08,type='square',v=.12){ try{ AC=AC||new (window.AudioContext||window.webkitAudioContext)(); const o=AC.createOscillator(),g=AC.createGain(); o.type=type;o.frequency.value=f;g.gain.setValueAtTime(v,AC.currentTime);g.gain.exponentialRampToValueAtTime(.001,AC.currentTime+d);o.connect(g).connect(AC.destination);o.start();o.stop(AC.currentTime+d);}catch(e){} }
+
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+const W=cv.width, H=cv.height;
+const $=id=>document.getElementById(id);
+const rnd=(a,b)=>a+Math.random()*(b-a);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+
+async function loadBest(){ if(!currentUser)return; try{
+  const snap=await getDocs(query(collection(db,"scores"),where("userId","==",currentUser.uid),where("gameId","==",GAME_ID)));
+  let m=0; snap.forEach(d=>{ if(d.data().score>m) m=d.data().score; });
+  if(m>0)$('best').innerText=m.toLocaleString();
+}catch(e){} }
+
+onAuthStateChanged(auth,u=>{ if(u){currentUser=u;loadBest();} });
+
+// ===== COLOR RUSH =====
+const COLORS=[['ROJO','#ff4d6d'],['AZUL','#4d9dff'],['VERDE','#3dff8e'],['AMARILLO','#ffd93d'],['MORADO','#c14dff'],['NARANJA','#ff9f4d']];
+let bubbles=[],target=0,timeLeft=60,pts=0,combo=1,flash=0;
+function reset(){ timeLeft=60;pts=0;combo=1;mkBubbles();newTarget();upd(); }
+function mkBubbles(){ bubbles=[]; for(let i=0;i<15;i++)bubbles.push({x:rnd(60,W-60),y:rnd(130,H-60),r:rnd(26,44),c:i%COLORS.length,vx:rnd(-70,70),vy:rnd(-70,70),alive:true}); }
+function newTarget(){ const alive=bubbles.filter(b=>b.alive); if(!alive.length)return nextWave();
+  const cs=[...new Set(alive.map(b=>b.c))]; target=cs[Math.floor(Math.random()*cs.length)]; }
+function nextWave(){ pts+=50*combo; flash=.5; beep(1200,.1);beep(1600,.1); bubbles.forEach(b=>{b.alive=true;b.x=rnd(60,W-60);b.y=rnd(130,H-60);}); newTarget(); upd(); }
+function upd(){ $('pts').innerText=pts;$('cmb').innerText='x'+combo;$('tleft').innerText=Math.ceil(timeLeft); }
+function update(dt){ if(!running)return; timeLeft-=dt; if(timeLeft<=0)return finish();
+  if(flash>0)flash-=dt;
+  bubbles.forEach(b=>{ if(!b.alive)return; b.x+=b.vx*dt;b.y+=b.vy*dt;
+    if(b.x<b.r){b.x=b.r;b.vx*=-1}if(b.x>W-b.r){b.x=W-b.r;b.vx*=-1}
+    if(b.y<115+b.r){b.y=115+b.r;b.vy*=-1}if(b.y>H-b.r){b.y=H-b.r;b.vy*=-1} });
+  if(!bubbles.some(b=>b.alive&&b.c===target))nextWave();
+  upd();
+}
+function draw(){ ctx.fillStyle='#0f0f1a';ctx.fillRect(0,0,W,H);
+  const tc=COLORS[target];
+  ctx.font='800 30px Segoe UI';ctx.textAlign='center';
+  ctx.fillStyle='rgba(255,255,255,.6)';ctx.fillText('REVIENTA TODAS LAS...',W/2,40);
+  ctx.shadowColor=tc[1];ctx.shadowBlur=22;ctx.fillStyle=tc[1];ctx.font='800 38px Segoe UI';ctx.fillText(tc[0]+'S',W/2,84);ctx.shadowBlur=0;
+  if(flash>0){ctx.fillStyle=`rgba(61,255,142,${Math.min(1,flash*2)})`;ctx.font='800 52px Segoe UI';ctx.fillText('¡ONDA LIMPIA! +'+(50*combo),W/2,H/2);}
+  bubbles.forEach(b=>{ if(!b.alive)return; const c=COLORS[b.c][1];
+    ctx.globalAlpha=b.c===target?.95:.4; ctx.shadowColor=c;ctx.shadowBlur=b.c===target?25:6;
+    ctx.fillStyle=c;ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,7);ctx.fill();ctx.shadowBlur=0;
+    ctx.fillStyle='rgba(255,255,255,.8)';ctx.font='700 12px Segoe UI';ctx.fillText(COLORS[(b.c+3)%6][0],b.x,b.y+4);
+    ctx.globalAlpha=1; });
+}
+cv.addEventListener('pointerdown',e=>{ if(!running)return; const r=cv.getBoundingClientRect();
+  const x=(e.clientX-r.left)*W/r.width,y=(e.clientY-r.top)*H/r.height;
+  for(const b of bubbles){ if(!b.alive)continue;
+    if(Math.hypot(x-b.x,y-b.y)<b.r+6){
+      if(b.c===target){ b.alive=false; pts+=10*combo; combo=Math.min(10,combo+1); beep(600+combo*80,.06,'square'); }
+      else { combo=1; pts=Math.max(0,pts-5); beep(150,.15,'sawtooth'); }
+      upd(); return; } }
+});
+function finish(){ addScore(pts); endRun(pts>=1200?'🌈 MAESTRO DEL COLOR':'🎨 FIN DEL RUSH',`Puntos: ${pts}`); }
+function addScore(n){ if(currentUser&&n>0)addDoc(collection(db,"scores"),{userId:currentUser.uid,gameId:GAME_ID,score:n,timestamp:new Date()}).then(loadBest).catch(()=>{}); }
+
+
+// lazos comunes de UI
+$('btnStart').onclick=()=>start();
+$('btnAgain').onclick=()=>start();
+function start(){ $('ovStart').style.display='none'; $('ovEnd').style.display='none'; reset(); running=true; lastTs=performance.now(); requestAnimationFrame(loop); }
+function endRun(t,m){ running=false; $('endTitle').innerText=t; $('endMsg').innerText=m; $('ovEnd').style.display='flex'; beep(140,.3,'sawtooth'); beep(90,.4,'sawtooth'); }
+let running=false,lastTs=0;
+function loop(ts){ if(!running)return; const dt=Math.min(.033,(ts-lastTs)/1000); lastTs=ts; update(dt); draw(); if(running)requestAnimationFrame(loop); }
+if(typeof reset==='function')reset();
+drawScene?.();
+</script>
+</body>
+</html>

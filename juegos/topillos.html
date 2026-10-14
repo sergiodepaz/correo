@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Los Topillos - Sergio's Arcade</title>
+<link rel="stylesheet" href="arcade.css">
+<style>
+  #gc { position:relative; }
+  canvas { display:block; }
+  .overlay { background:rgba(15,12,41,.85); border-radius:14px; backdrop-filter:blur(6px); z-index:5; }
+  .keys { margin-top:12px; color:var(--muted); font-size:.9rem; text-align:center; line-height:1.6; }
+  kbd { background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.25); border-bottom-width:3px; border-radius:6px; padding:2px 8px; font-weight:700; color:#fff; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hud"><span>⭐ Puntos<b id="pts">0</b></span><span>🔥 Combo<b id="cmb">x1</b></span><span>⏱️ Tiempo<b id="tleft">60</b></span><span>🏆 Récord<b id="best">—</b></span></div>
+  <div id="gc">
+    <canvas id="cv" width="760" height="440"></canvas>
+    <div class="overlay" id="ovStart">
+      <h2>🔨 LOS TOPILLOS</h2>
+      <p>60 segundos de puro mazazo: hámsters +10, brillantes ✨ +50... y si pegas a un erizo 🦔 pierdes 30 puntos y el combo. Cada golpe seguido sube el multiplicador.</p>
+      <button class="btn-neon" id="btnStart">▶ ¡A GOLPEAR!</button>
+    </div>
+    <div class="overlay" id="ovEnd" style="display:none">
+      <h2 id="endTitle">💥 ¡FIN!</h2>
+      <p id="endMsg"></p>
+      <button class="btn-neon" id="btnAgain">🔄 OTRA PARTIDA</button>
+    </div>
+  </div>
+  <div class="keys">Haz clic/toca sobre los bichos antes de que se escondan</div>
+  <a href="juegos.html" class="back">← Volver al catálogo</a>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getFirestore, collection, query, where, getDocs, addDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBmTBMyE7Y_LgSXH1SrmEv29DLYdxkyUEw",
+  authDomain: "compartir-textos-app.firebaseapp.com",
+  projectId: "compartir-textos-app",
+  storageBucket: "compartir-textos-app.firebasestorage.app",
+  messagingSenderId: "705083380628",
+  appId: "1:705083380628:web:ce267570e09e3ef1b27581"
+};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+let currentUser = null;
+const GAME_ID='topillos';
+
+let AC=null;
+function beep(f,d=.08,type='square',v=.12){ try{ AC=AC||new (window.AudioContext||window.webkitAudioContext)(); const o=AC.createOscillator(),g=AC.createGain(); o.type=type;o.frequency.value=f;g.gain.setValueAtTime(v,AC.currentTime);g.gain.exponentialRampToValueAtTime(.001,AC.currentTime+d);o.connect(g).connect(AC.destination);o.start();o.stop(AC.currentTime+d);}catch(e){} }
+
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+const W=cv.width, H=cv.height;
+const $=id=>document.getElementById(id);
+const rnd=(a,b)=>a+Math.random()*(b-a);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+
+async function loadBest(){ if(!currentUser)return; try{
+  const snap=await getDocs(query(collection(db,"scores"),where("userId","==",currentUser.uid),where("gameId","==",GAME_ID)));
+  let m=0; snap.forEach(d=>{ if(d.data().score>m) m=d.data().score; });
+  if(m>0)$('best').innerText=m.toLocaleString();
+}catch(e){} }
+
+onAuthStateChanged(auth,u=>{ if(u){currentUser=u;loadBest();} });
+
+// ===== LOS TOPILLOS (whack-a-mole) =====
+document.getElementById('gc').innerHTML='<div id="grid"></div>';
+const gridEl=document.getElementById('grid');
+gridEl.style.cssText='display:grid;grid-template-columns:repeat(3,1fr);gap:14px;width:min(92vw,460px)';
+const holes=[];
+for(let i=0;i<9;i++){ const h=document.createElement('div');
+  h.style.cssText='aspect-ratio:1;border-radius:50%;background:radial-gradient(circle at 50% 30%,#3a2d1a,#1a1208);border:3px solid rgba(102,126,234,.35);display:flex;align-items:center;justify-content:center;font-size:clamp(2.2rem,8vw,3.4rem);cursor:pointer;user-select:none;transition:transform .08s';
+  holes.push({el:h,who:null,t:0}); gridEl.appendChild(h); }
+let pts=0,combo=1,timeLeft=60,spawnT=0,hits=0,misses=0,over=false;
+const KINDS=[{e:'🐹',p:10},{e:'🐹',p:10},{e:'🐹',p:10},{e:'🐹',p:10},{e:'✨',p:50,gold:true},{e:'🦔',p:-30,hedgehog:true}];
+function reset(){ pts=0;combo=1;timeLeft=60;spawnT=.4;hits=0;misses=0;over=false; holes.forEach(h=>{h.who=null;h.el.textContent='';}); upd(); }
+function upd(){ $('pts').innerText=pts; $('cmb').innerText='x'+combo; $('tleft').innerText=Math.ceil(timeLeft); }
+function update(dt){ if(over)return;
+  timeLeft-=dt; if(timeLeft<=0){ over=true; return finish(); }
+  spawnT-=dt;
+  if(spawnT<=0){ const free=holes.filter(h=>!h.who);
+    if(free.length){ const h=free[Math.floor(Math.random()*free.length)];
+      let k=KINDS[Math.floor(Math.random()*KINDS.length)];
+      h.who=k; h.t=(k.gold?1.1:k.hedgehog?1.6:Math.max(.55,1.5-timeLeft*.012));
+      h.el.textContent=k.e; }
+    spawnT=Math.max(.28,.75-timeLeft*.006)+Math.random()*.3; }
+  holes.forEach(h=>{ if(h.who){ h.t-=dt; if(h.t<=0){ if(!h.who.hedgehog) combo=1; h.who=null; h.el.textContent=''; upd(); } } });
+}
+function draw(){}
+gridEl.addEventListener('pointerdown',e=>{ if(!running||over)return;
+  let el=e.target; while(el&&el.parentElement!==gridEl)el=el.parentElement; if(!el||el.parentElement!==gridEl)return;
+  const h=holes[Array.from(gridEl.children).indexOf(el)];
+  if(h.who){ const k=h.who;
+    if(k.hedgehog){ pts=Math.max(0,pts+k.p); combo=1; misses++; beep(120,.2,'sawtooth'); }
+    else { pts+=k.p*combo; hits++; combo=Math.min(8,combo+1); beep(k.gold?1400:800,.07,'square'); }
+    h.who=null; h.el.textContent=''; upd();
+  } else { combo=Math.max(1,combo-1); beep(200,.05,'triangle'); upd(); }
+});
+function finish(){ addScore(pts);
+  endRun(pts>=800?'👑 MAZADOR LEGENDARIO':pts>=400?'🔨 BUEN MAZAZO':'😅 SIGA PRACTICANDO',
+    `Puntos: ${pts} · Aciertos: ${hits} · Fallos: ${misses}`); }
+function addScore(n){ if(currentUser&&n>0)addDoc(collection(db,"scores"),{userId:currentUser.uid,gameId:GAME_ID,score:n,timestamp:new Date()}).then(loadBest).catch(()=>{}); }
+
+
+// lazos comunes de UI
+$('btnStart').onclick=()=>start();
+$('btnAgain').onclick=()=>start();
+function start(){ $('ovStart').style.display='none'; $('ovEnd').style.display='none'; reset(); running=true; lastTs=performance.now(); requestAnimationFrame(loop); }
+function endRun(t,m){ running=false; $('endTitle').innerText=t; $('endMsg').innerText=m; $('ovEnd').style.display='flex'; beep(140,.3,'sawtooth'); beep(90,.4,'sawtooth'); }
+let running=false,lastTs=0;
+function loop(ts){ if(!running)return; const dt=Math.min(.033,(ts-lastTs)/1000); lastTs=ts; update(dt); draw(); if(running)requestAnimationFrame(loop); }
+if(typeof reset==='function')reset();
+drawScene?.();
+</script>
+</body>
+</html>

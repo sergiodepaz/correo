@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Whack-a-Mole - Sergio's Arcade</title>
+<link rel="stylesheet" href="arcade.css">
+<style>
+  #gc { position:relative; }
+  canvas { display:block; cursor:pointer; }
+  .overlay { background:rgba(15,12,41,.85); border-radius:14px; backdrop-filter:blur(6px); z-index:5; }
+  .diffsel { display:flex; gap:8px; margin-bottom:14px; }
+  .diffsel button { padding:8px 16px; border-radius:20px; cursor:pointer; font-weight:700; font-size:.85rem;
+                    background:rgba(255,255,255,.07); color:var(--muted); border:1px solid rgba(255,255,255,.15); transition:all .2s; }
+  .diffsel button.on { background:linear-gradient(90deg,var(--primary),var(--accent)); color:#04121f; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hud"><span>⭐ Puntos<b id="score">0</b></span><span>🔥 Combo<b id="combo">x1</b></span><span>⏱️ Tiempo<b id="time">30</b></span><span>🏆 Récord<b id="best">—</b></span></div>
+  <div class="diffsel">
+    <button data-d="easy" class="on">FÁCIL 🐢</button><button data-d="medium">NORMAL 🐇</button><button data-d="hard">IMPOSIBLE 👹</button>
+  </div>
+  <div id="gc">
+    <canvas id="cv" width="540" height="540"></canvas>
+    <div class="overlay" id="ovStart">
+      <h2>🔨 WHACK-A-MOLE</h2>
+      <p>Golpea a los topos antes de que se escondan. No golpees a las bombas 💣 (restan puntos) y cazar estrellas ⭐ da bonus. ¡Los combos multiplican!</p>
+      <button class="btn-neon" id="btnStart">▶ EMPEZAR</button>
+    </div>
+    <div class="overlay" id="ovEnd" style="display:none">
+      <h2 id="endTitle">⏰ ¡SE ACABÓ!</h2>
+      <p id="endMsg"></p>
+      <button class="btn-neon" id="btnAgain">🔄 OTRA VEZ</button>
+    </div>
+  </div>
+  <a href="juegos.html" class="back">← Volver al catálogo</a>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getFirestore, collection, query, where, getDocs, addDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBmTBMyE7Y_LgSXH1SrmEv29DLYdxkyUEw",
+  authDomain: "compartir-textos-app.firebaseapp.com",
+  projectId: "compartir-textos-app",
+  storageBucket: "compartir-textos-app.firebasestorage.app",
+  messagingSenderId: "705083380628",
+  appId: "1:705083380628:web:ce267570e09e3ef1b27581"
+};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+let currentUser = null;
+const GAME_ID = 'whack';
+
+// ===== Audio =====
+let AC=null;
+function beep(f,d=.08,type='square',v=.15){ try{ AC=AC||new (window.AudioContext||window.webkitAudioContext)(); const o=AC.createOscillator(),g=AC.createGain(); o.type=type;o.frequency.value=f;g.gain.setValueAtTime(v,AC.currentTime);g.gain.exponentialRampToValueAtTime(.001,AC.currentTime+d);o.connect(g).connect(AC.destination);o.start();o.stop(AC.currentTime+d);}catch(e){} }
+
+// ===== Config =====
+const CFG = {
+  easy:   { spawnMin:500, spawnMax:1100, upMin:1100, upMax:1800 },
+  medium: { spawnMin:350, spawnMax:800,  upMin:750,  upMax:1200 },
+  hard:   { spawnMin:220, spawnMax:520,  upMin:450,  upMax:800  }
+};
+let diff='easy';
+
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+const N=3, HOLE=180, PAD=(540-N*HOLE)/(N+1);
+const holes=[]; for(let r=0;r<N;r++)for(let c=0;c<N;c++)holes.push({x:PAD+c*(HOLE+PAD)+HOLE/2, y:PAD+r*(HOLE+PAD)+HOLE/2, occ:null});
+
+let moles=[], score=0, combo=1, timeLeft=30, running=false, lastTs=0, spawnT=0, particles=[];
+const $=id=>document.getElementById(id);
+
+async function loadBest(){ if(!currentUser)return; try{
+  const snap=await getDocs(query(collection(db,"scores"),where("userId","==",currentUser.uid),where("gameId","==",GAME_ID)));
+  let b=0; snap.forEach(d=>b=Math.max(b,d.data().score)); $('best').innerText=b||'—';
+}catch(e){} }
+
+function spawnMole(){
+  const free=holes.filter(h=>!h.occ);
+  if(!free.length)return;
+  const h=free[Math.random()*free.length|0];
+  const roll=Math.random();
+  const type= roll<.12?'bomb': roll<.2?'star':'mole';
+  const cfg=CFG[diff];
+  h.occ={type, born:performance.now(), life:cfg.upMin+Math.random()*(cfg.upMax-cfg.upMin), hit:false};
+}
+
+function pop(x,y,text,color){
+  particles.push({x,y,text,color,life:1});
+  if(particles.length>40)particles.shift();
+}
+
+function whack(px,py){
+  if(!running)return;
+  for(const h of holes){
+    const m=h.occ; if(!m||m.hit)continue;
+    const dx=px-h.x, dy=py-(h.y-30*Math.min(1,(performance.now()-m.born)/150));
+    if(dx*dx+dy*dy<70*70){
+      m.hit=true;
+      if(m.type==='bomb'){ score=Math.max(0,score-50); combo=1; beep(120,.3,'sawtooth',.25); pop(h.x,h.y,'-50 💣','#ff5566'); }
+      else {
+        const base=m.type==='star'?30:10;
+        const pts=base*combo; score+=pts;
+        if(m.type==='star'){ combo=Math.min(9,combo+1); beep(880,.12,'triangle',.2); beep(1320,.12,'triangle',.15); pop(h.x,h.y,'+'+pts+' ⭐','#ffe36b'); }
+        else { combo=Math.min(9,combo+1); beep(300+combo*60,.09,'square',.18); pop(h.x,h.y,'+'+pts,'#5dff9d'); }
+      }
+      setTimeout(()=>{h.occ=null;},120);
+      updHud(); return;
+    }
+  }
+  combo=1; beep(150,.06,'sine',.08); updHud(); // golpe al aire rompe combo
+}
+
+function updHud(){ $('score').innerText=score; $('combo').innerText='x'+combo; $('time').innerText=Math.ceil(timeLeft); }
+
+function draw(ts){
+  const dt=lastTs?(ts-lastTs)/1000:0; lastTs=ts;
+  if(running){
+    timeLeft-=dt;
+    if(timeLeft<=0){ endGame(); }
+    spawnT-=dt*1000;
+    const cfg=CFG[diff];
+    if(spawnT<=0){ spawnMole(); spawnT=cfg.spawnMin+Math.random()*(cfg.spawnMax-cfg.spawnMin); }
+    for(const h of holes){ if(h.occ&&!h.occ.hit&&ts-h.occ.born>h.occ.life){ h.occ=null; } }
+    $('time').innerText=Math.max(0,Math.ceil(timeLeft));
+  }
+  // fondo hierba
+  ctx.clearRect(0,0,540,540);
+  const g=ctx.createLinearGradient(0,0,0,540); g.addColorStop(0,'#1c2a4a'); g.addColorStop(1,'#14213d');
+  ctx.fillStyle=g; ctx.fillRect(0,0,540,540);
+  for(const h of holes){
+    // agujero
+    ctx.beginPath(); ctx.ellipse(h.x,h.y+40,62,22,0,0,Math.PI*2);
+    ctx.fillStyle='#0a0a14'; ctx.fill();
+    ctx.strokeStyle='rgba(102,126,234,.4)'; ctx.lineWidth=3; ctx.stroke();
+    const m=h.occ;
+    if(m){
+      const t=Math.min(1,(ts-m.born)/150);
+      const rise=t*58;
+      const gone=m.hit?1:Math.max(0,Math.min(1,(ts-m.born)/ (m.life) > .8 ? (1-((ts-m.born)/m.life-.8)/.2) : 1));
+      const y=h.y+40-rise*gone;
+      ctx.save(); ctx.translate(h.x,y);
+      if(m.type==='bomb'){
+        ctx.font='64px serif'; ctx.textAlign='center'; ctx.fillText('💣',0,0);
+      } else if(m.type==='star'){
+        ctx.font='60px serif'; ctx.textAlign='center'; ctx.fillText('⭐',0,0);
+      } else {
+        ctx.font='62px serif'; ctx.textAlign='center'; ctx.fillText('🐹',0,0);
+      }
+      // barra de tiempo restante
+      if(!m.hit){
+        const frac=1-(ts-m.born)/m.life;
+        ctx.fillStyle=frac>.4?'#5dff9d':'#ff5566';
+        ctx.fillRect(-30,-52,60*frac,6);
+        ctx.strokeStyle='rgba(255,255,255,.3)'; ctx.lineWidth=1; ctx.strokeRect(-30,-52,60,6);
+      }
+      ctx.restore();
+    }
+  }
+  // partículas flotantes
+  for(const p of particles){
+    p.life-=dt*1.4; p.y-=dt*50;
+    if(p.life>0){ ctx.globalAlpha=p.life; ctx.font='bold 26px Segoe UI'; ctx.textAlign='center'; ctx.fillStyle=p.color; ctx.fillText(p.text,p.x,p.y); ctx.globalAlpha=1; }
+  }
+  particles=particles.filter(p=>p.life>0);
+  requestAnimationFrame(draw);
+}
+requestAnimationFrame(draw);
+
+function endGame(){
+  running=false;
+  $('ovEnd').style.display='flex';
+  const msg = score>=400?'🤯 ¡Manos de ninja legendario!' : score>=250?'🔥 ¡Muy buenos reflejos!' : score>=100?'👍 ¡Nada mal, sigue practicando!' : '🐢 ¿Un cafecito antes de otra?';
+  $('endMsg').innerText=`Puntuación final: ${score}. ${msg}`;
+  if(score>0&&currentUser){
+    addDoc(collection(db,"scores"),{userId:currentUser.uid, gameId:GAME_ID, score, timestamp:new Date()}).then(loadBest).catch(()=>{});
+  }
+}
+
+function startGame(){
+  score=0; combo=1; timeLeft=30; spawnT=0; particles=[]; holes.forEach(h=>h.occ=null);
+  updHud(); running=true;
+  $('ovStart').style.display='none'; $('ovEnd').style.display='none';
+  beep(660,.1,'triangle',.15);
+}
+
+$('btnStart').onclick=startGame;
+$('btnAgain').onclick=startGame;
+document.querySelectorAll('.diffsel button').forEach(b=>b.onclick=function(){
+  document.querySelectorAll('.diffsel button').forEach(x=>x.classList.remove('on'));
+  this.classList.add('on'); diff=this.dataset.d;
+});
+
+cv.addEventListener('pointerdown',e=>{
+  const r=cv.getBoundingClientRect();
+  const sc=540/r.width;
+  whack((e.clientX-r.left)*sc,(e.clientY-r.top)*sc);
+});
+
+onAuthStateChanged(auth,async u=>{ if(!u){window.location.href='../index.html';return;} currentUser=u; await loadBest(); });
+</script>
+</body>
+</html>

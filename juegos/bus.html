@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bus de la Suerte - Sergio's Arcade</title>
+<link rel="stylesheet" href="arcade.css">
+<style>
+  .stage { position:relative; width:min(94vw,560px); }
+  canvas { display:block; width:100%; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin-bottom:12px; }
+  .chip { padding:8px 16px; border-radius:20px; font-weight:800; cursor:pointer; font-size:.95rem;
+          background:rgba(255,255,255,.07); color:var(--muted); border:1px solid rgba(255,255,255,.15); transition:all .2s; }
+  .chip.on { background:linear-gradient(90deg,#ffb347,#ff5e62); color:#fff; box-shadow:0 0 14px rgba(255,94,98,.5); }
+  .bank { text-align:center; font-size:1.3rem; margin-bottom:10px; }
+  .bank b { color:#ffd76a; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hud"><span>💰 Banco<b id="bankEl">100</b></span><span>🚌 Ronda<b id="roundEl">—</b></span><span>🏆 Máx<b id="bestEl">—</b></span></div>
+  <div class="bank" id="msg">Apostando: <b id="betEl">0</b> 🪙</div>
+  <div class="chips" id="chips"></div>
+  <div class="stage">
+    <canvas id="cv" width="560" height="360"></canvas>
+    <div class="overlay" id="ov">
+      <h2>🚌 BUS DE LA SUERTE</h2>
+      <p>Apuesta tus monedas a un bus. Si gana, ¡multiplicas! El primero en cruzar la meta se lo lleva todo.</p>
+      <button class="btn-neon" id="playBtn">🎰 JUGAR</button>
+    </div>
+  </div>
+  <a href="juegos.html" class="back">← Volver al catálogo</a>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getFirestore, collection, query, where, getDocs, addDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+const app = initializeApp({apiKey:"AIzaSyBmTBMyE7Y_LgSXH1SrmEv29DLYdxkyUEw",authDomain:"compartir-textos-app.firebaseapp.com",projectId:"compartir-textos-app",storageBucket:"compartir-textos-app.firebasestorage.app",messagingSenderId:"705083380628",appId:"1:705083380628:web:ce267570e09e3ef1b27581"});
+const auth=getAuth(app), db=getFirestore(app);
+let currentUser=null, best=0;
+onAuthStateChanged(auth, async u=>{
+  if(!u){ location.href='../index.html'; return; }
+  currentUser=u;
+  try{ const s=await getDocs(query(collection(db,"scores"),where("userId","==",u.uid),where("gameId","==","bus")));
+       s.forEach(d=>best=Math.max(best,d.data().score)); document.getElementById('bestEl').innerText=best||'—'; }catch(e){}
+});
+
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+const BUSES=[
+  {name:'🚒 Turbo', color:'#ff5e62', mult:6},
+  {name:'🚌 Chispa', color:'#ffb347', mult:4},
+  {name:'🚐 Rayo', color:'#00f2fe', mult:3},
+  {name:'🏎️ Bala', color:'#7cfc9a', mult:2.2},
+];
+let bank=100, bet=0, picked=-1, round=0, racing=false, t=0, raf=null;
+let pos=[], spd=[];
+
+const chipsEl=document.getElementById('chips');
+[10,25,50].forEach(v=>{ const c=document.createElement('div'); c.className='chip'; c.innerText=v+' 🪙';
+  c.onclick=()=>{ if(racing||bank<v) return; bet+=v; bank-=v; updateHud(); flash(c); };
+  chipsEl.appendChild(c); });
+const clearChip=document.createElement('div'); clearChip.className='chip'; clearChip.innerText='↩️ Recuperar';
+clearChip.onclick=()=>{ if(racing) return; bank+=bet; bet=0; updateHud(); };
+chipsEl.appendChild(clearChip);
+// selección de bus
+BUSES.forEach((b,i)=>{ const c=document.createElement('div'); c.className='chip'; c.style.borderColor=b.color;
+  c.innerText=`${b.name} x${b.mult}`;
+  c.onclick=()=>{ if(racing) return; picked=i;
+    [...chipsEl.children].filter(x=>x.innerText.includes('x')).forEach(x=>x.classList.remove('on'));
+    c.classList.add('on'); };
+  chipsEl.appendChild(c); });
+function flash(el){ el.style.transform='scale(1.25)'; setTimeout(()=>el.style.transform='',150); }
+
+const playBtn=document.getElementById('playBtn');
+playBtn.onclick=()=>{
+  if(racing) return;
+  if(bank<=0){ bank=100; bet=0; picked=-1; updateHud(); }
+  if(bet===0){ alert('¡Primero apuesta fichas arriba! 👆'); return; }
+  if(picked<0){ alert('¡Elige un bus! 🚌'); return; }
+  document.getElementById('ov').style.display='none';
+  startRace();
+};
+
+function updateHud(){
+  document.getElementById('bankEl').innerText=bank;
+  document.getElementById('betEl').innerText=bet;
+  document.getElementById('roundEl').innerText=round||'—';
+}
+
+function startRace(){
+  racing=true; round++; t=0;
+  pos=BUSES.map(()=>0);
+  spd=BUSES.map(()=>0.9+Math.random()*0.5); // ventaja aleatoria base
+  document.getElementById('ov').style.display='none';
+  loop();
+}
+
+function loop(){
+  t++;
+  const finishX=500;
+  for(let i=0;i<4;i++){
+    spd[i]+= (Math.random()-0.5)*0.12;
+    spd[i]=Math.max(0.3,Math.min(2.2,spd[i]));
+    // pequeño sesgo para que los multiplicadores altos ganen menos a menudo
+    const bias={6:0.965,4:0.98,3:0.99,2.2:1.0}[BUSES[i].mult];
+    pos[i]+=spd[i]*bias;
+  }
+  draw(finishX);
+  const winner=pos.findIndex(p=>p>=finishX);
+  if(winner>=0){ endRace(winner); return; }
+  raf=requestAnimationFrame(loop);
+}
+
+function draw(finishX){
+  ctx.fillStyle='#12121f'; ctx.fillRect(0,0,560,360);
+  // pista
+  for(let lane=0;lane<4;lane++){
+    const y=40+lane*80;
+    ctx.fillStyle=lane%2?'#181828':'#1b1b2e'; ctx.fillRect(0,y-25,560,70);
+    ctx.strokeStyle='rgba(255,255,255,.12)'; ctx.setLineDash([12,10]);
+    ctx.beginPath(); ctx.moveTo(0,y+45); ctx.lineTo(560,y+45); ctx.stroke(); ctx.setLineDash([]);
+    // meta
+    for(let k=0;k<6;k++){ ctx.fillStyle=k%2?'#fff':'#333'; ctx.fillRect(finishX+8+k*4,y-25,4,70); }
+    // bus
+    const x=10+pos[lane];
+    ctx.font='40px serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(['🚒','🚌','🚐','🏎️'][lane], x, y+10);
+    if(lane===picked){ ctx.fillStyle='#ffd76a'; ctx.font='bold 13px sans-serif'; ctx.fillText('▼ TU BUS', x, y-32); }
+    ctx.fillStyle=BUSES[lane].color; ctx.font='bold 12px sans-serif'; ctx.textAlign='left';
+    ctx.fillText(BUSES[lane].name, 8, y-32);
+  }
+  if(t%20<10 && bet>0){ ctx.fillStyle='#ffd76a'; ctx.font='bold 16px sans-serif'; ctx.textAlign='center';
+    ctx.fillText(`🪙 ${bet} en juego`, 280, 345); }
+}
+
+async function endRace(winner){
+  racing=false; cancelAnimationFrame(raf);
+  const won = winner===picked;
+  const gain = won ? Math.floor(bet*BUSES[winner].mult) : 0;
+  bank+=gain; 
+  const ov=document.getElementById('ov'); ov.style.display='flex';
+  ov.querySelector('h2').innerText = won?`🎉 ¡${BUSES[winner].name} GANA!`:`💀 Perdiste...`;
+  ov.querySelector('p').innerText = won? `Ganaste ${gain} monedas 🪙` : `El ganador fue ${BUSES[winner].name}. Apuesta con cabeza 😅`;
+  playBtn.innerText = bank>0?'🎰 OTRA RONDA':'😭 QUIEBRA — REINICIAR';
+  updateHud();
+  if(bank>best){ best=bank; document.getElementById('bestEl').innerText=best;
+    if(currentUser) await addDoc(collection(db,"scores"),{userId:currentUser.uid,gameId:'bus',score:best,timestamp:new Date()}).catch(()=>{}); }
+  if(bank<=0){ bank=100; bet=0; picked=-1; updateHud(); }
+  playBtn.onclick=()=>{ if(playBtn.innerText.includes('QUIEBRA')){ playBtn.innerText='🎰 JUGAR'; } else playBtn.click&&startFromOverlay(); };
+}
+function startFromOverlay(){ document.getElementById('ov').style.display='none'; startRace(); }
+// reencuadre simple del botón
+const origClick=playBtn.onclick;
+playBtn.onclick=()=>{ if(racing)return;
+  if(bet===0){alert('¡Primero apuesta fichas arriba! 👆');return;}
+  if(picked<0){alert('¡Elige un bus! 🚌');return;}
+  startRace(); };
+updateHud();
+draw(500);
+</script>
+</body>
+</html>

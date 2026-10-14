@@ -1,0 +1,39 @@
+// ===== COLOR RUSH =====
+const COLORS=[['ROJO','#ff4d6d'],['AZUL','#4d9dff'],['VERDE','#3dff8e'],['AMARILLO','#ffd93d'],['MORADO','#c14dff'],['NARANJA','#ff9f4d']];
+let bubbles=[],target=0,timeLeft=60,pts=0,combo=1,flash=0;
+function reset(){ timeLeft=60;pts=0;combo=1;mkBubbles();newTarget();upd(); }
+function mkBubbles(){ bubbles=[]; for(let i=0;i<15;i++)bubbles.push({x:rnd(60,W-60),y:rnd(130,H-60),r:rnd(26,44),c:i%COLORS.length,vx:rnd(-70,70),vy:rnd(-70,70),alive:true}); }
+function newTarget(){ const alive=bubbles.filter(b=>b.alive); if(!alive.length)return nextWave();
+  const cs=[...new Set(alive.map(b=>b.c))]; target=cs[Math.floor(Math.random()*cs.length)]; }
+function nextWave(){ pts+=50*combo; flash=.5; beep(1200,.1);beep(1600,.1); bubbles.forEach(b=>{b.alive=true;b.x=rnd(60,W-60);b.y=rnd(130,H-60);}); newTarget(); upd(); }
+function upd(){ $('pts').innerText=pts;$('cmb').innerText='x'+combo;$('tleft').innerText=Math.ceil(timeLeft); }
+function update(dt){ if(!running)return; timeLeft-=dt; if(timeLeft<=0)return finish();
+  if(flash>0)flash-=dt;
+  bubbles.forEach(b=>{ if(!b.alive)return; b.x+=b.vx*dt;b.y+=b.vy*dt;
+    if(b.x<b.r){b.x=b.r;b.vx*=-1}if(b.x>W-b.r){b.x=W-b.r;b.vx*=-1}
+    if(b.y<115+b.r){b.y=115+b.r;b.vy*=-1}if(b.y>H-b.r){b.y=H-b.r;b.vy*=-1} });
+  if(!bubbles.some(b=>b.alive&&b.c===target))nextWave();
+  upd();
+}
+function draw(){ ctx.fillStyle='#0f0f1a';ctx.fillRect(0,0,W,H);
+  const tc=COLORS[target];
+  ctx.font='800 30px Segoe UI';ctx.textAlign='center';
+  ctx.fillStyle='rgba(255,255,255,.6)';ctx.fillText('REVIENTA TODAS LAS...',W/2,40);
+  ctx.shadowColor=tc[1];ctx.shadowBlur=22;ctx.fillStyle=tc[1];ctx.font='800 38px Segoe UI';ctx.fillText(tc[0]+'S',W/2,84);ctx.shadowBlur=0;
+  if(flash>0){ctx.fillStyle=`rgba(61,255,142,${Math.min(1,flash*2)})`;ctx.font='800 52px Segoe UI';ctx.fillText('¡ONDA LIMPIA! +'+(50*combo),W/2,H/2);}
+  bubbles.forEach(b=>{ if(!b.alive)return; const c=COLORS[b.c][1];
+    ctx.globalAlpha=b.c===target?.95:.4; ctx.shadowColor=c;ctx.shadowBlur=b.c===target?25:6;
+    ctx.fillStyle=c;ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,7);ctx.fill();ctx.shadowBlur=0;
+    ctx.fillStyle='rgba(255,255,255,.8)';ctx.font='700 12px Segoe UI';ctx.fillText(COLORS[(b.c+3)%6][0],b.x,b.y+4);
+    ctx.globalAlpha=1; });
+}
+cv.addEventListener('pointerdown',e=>{ if(!running)return; const r=cv.getBoundingClientRect();
+  const x=(e.clientX-r.left)*W/r.width,y=(e.clientY-r.top)*H/r.height;
+  for(const b of bubbles){ if(!b.alive)continue;
+    if(Math.hypot(x-b.x,y-b.y)<b.r+6){
+      if(b.c===target){ b.alive=false; pts+=10*combo; combo=Math.min(10,combo+1); beep(600+combo*80,.06,'square'); }
+      else { combo=1; pts=Math.max(0,pts-5); beep(150,.15,'sawtooth'); }
+      upd(); return; } }
+});
+function finish(){ addScore(pts); endRun(pts>=1200?'🌈 MAESTRO DEL COLOR':'🎨 FIN DEL RUSH',`Puntos: ${pts}`); }
+function addScore(n){ if(currentUser&&n>0)addDoc(collection(db,"scores"),{userId:currentUser.uid,gameId:GAME_ID,score:n,timestamp:new Date()}).then(loadBest).catch(()=>{}); }

@@ -1,0 +1,49 @@
+// ===== MEMOJI (memoria contrarreloj) =====
+const EMO=['🍕','🐸','🚀','🎩','🐙','🍩','⚡','🌵','🦄','🍿','🎲','🐧','🌮','👾','🎸','🍄','🐝','🔥','❄️','🌙','🥑','🎯','🐳','🍭'];
+const LV=[{n:'FÁCIL',pairs:6,time:45,cols:4},{n:'NORMAL',pairs:8,time:50,cols:4},{n:'DIFÍCIL',pairs:10,time:55,cols:5},{n:'IMPOSIBLE',pairs:12,time:60,cols:6}];
+let lv=0,cards=[],first=null,lock=false,pairs=0,pts=0,timeLeft=60,moves=0;
+document.getElementById('gc').innerHTML='<div id="lvlbar"></div><div id="board"></div>';
+const lvlbar=document.getElementById('lvlbar'), board=document.getElementById('board');
+lvlbar.style.cssText='display:flex;gap:8px;justify-content:center;margin-bottom:14px;flex-wrap:wrap';
+LV.forEach((l,i)=>{const b=document.createElement('button');b.textContent=l.n;
+ b.style.cssText='padding:8px 14px;border-radius:20px;font-weight:700;font-size:.8rem;cursor:pointer;background:rgba(255,255,255,.07);color:#b0b0d0;border:1px solid rgba(255,255,255,.15)';
+ b.onclick=()=>{lv=i;startGame();};lvlbar.appendChild(b);});
+function setOn(){[...lvlbar.children].forEach((b,i)=>{b.style.background=i===lv?'linear-gradient(90deg,#667eea,#00f2fe)':'rgba(255,255,255,.07)';b.style.color=i===lv?'#04121f':'#b0b0d0';});}
+function startGame(){ setOn();
+  const l=LV[lv]; pairs=0;pts=0;moves=0;timeLeft=l.time;first=null;lock=false;
+  const picks=EMO.slice().sort(()=>Math.random()-.5).slice(0,l.pairs);
+  cards=(picks.concat(picks)).sort(()=>Math.random()-.5).map(e=>({e,up:false,done:false}));
+  board.style.display='grid';
+  board.style.gridTemplateColumns=`repeat(${l.cols},minmax(0,1fr))`; board.style.gap='10px'; board.style.width='min(92vw,520px)';
+  board.innerHTML='';
+  cards.forEach((c,i)=>{ const el=document.createElement('div');
+    el.style.cssText='aspect-ratio:3/4;border-radius:12px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:clamp(1.6rem,6vw,2.4rem);background:linear-gradient(135deg,#667eea,#764ba2);border:1px solid rgba(255,255,255,.2);transition:background .2s;user-select:none';
+    el.textContent='❔'; c.el=el; el.onclick=()=>flip(i); board.appendChild(el); });
+  upd(); $('ovStart').style.display='none'; $('ovEnd').style.display='none';
+  if(!running){running=true;lastTs=performance.now();requestAnimationFrame(loop);}
+}
+function flip(i){ if(lock||!running)return; const c=cards[i]; if(c.done||c.up)return;
+  c.up=true; c.el.textContent=c.e; c.el.style.background='rgba(255,255,255,.12)'; beep(700,.05,'triangle'); moves++;
+  if(!first){first=i;return;}
+  const f=cards[first]; first=null;
+  if(f.e===c.e){ f.done=c.done=true; pairs++; pts+=100; timeLeft+=4;
+    [f.el,c.el].forEach(el=>{el.style.background='rgba(61,255,142,.25)';el.style.borderColor='#3dff8e';});
+    beep(1000,.08);beep(1400,.1); upd();
+    if(pairs===LV[lv].pairs)win();
+  } else { lock=true;
+    setTimeout(()=>{ [f,c].forEach(cc=>{ if(!cc.done){cc.up=false;cc.el.textContent='❔';cc.el.style.background='linear-gradient(135deg,#667eea,#764ba2)';} }); lock=false; },700);
+    beep(250,.1,'sawtooth');
+  }
+  upd();
+}
+function win(){ const bonus=Math.round(Math.max(0,timeLeft)*20); pts+=bonus;
+  addScore(pts); running=false;
+  endRun('🧠 MENTE DE ACERO',`${LV[lv].n} completado en ${moves} movimientos · BONUS +${bonus} · Total ${pts}`);
+  beep(880,.12);beep(1100,.12);beep(1500,.2);
+}
+function upd(){ $('pr').innerText=pairs+'/'+LV[lv].pairs; $('clock').innerText=Math.ceil(timeLeft); $('pts').innerText=pts; }
+function reset(){ startGame(); }
+function update(dt){ if(!running)return; timeLeft-=dt; upd();
+  if(timeLeft<=0){running=false;addScore(pts);endRun('⏰ SIN TIEMPO',`Encontraste ${pairs} parejas · ${pts} puntos`);} }
+function draw(){}
+function addScore(n){ if(currentUser&&n>0)addDoc(collection(db,"scores"),{userId:currentUser.uid,gameId:GAME_ID,score:n,timestamp:new Date()}).then(loadBest).catch(()=>{}); }
