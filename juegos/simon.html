@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Memoria Lumínica - Sergio's Arcade</title>
+<link rel="stylesheet" href="arcade.css">
+<style>
+  .pad-grid { display:grid; grid-template-columns:repeat(2,150px); gap:14px; margin:30px auto; }
+  .pad { width:150px; height:150px; border-radius:24px; cursor:pointer; opacity:.45; transition:opacity .12s, transform .12s, box-shadow .12s; border:none; }
+  .pad.active { opacity:1; transform:scale(1.06); }
+  #p0 { background:#ff5252; } #p0.active { box-shadow:0 0 40px #ff5252; }
+  #p1 { background:#42a5f5; } #p1.active { box-shadow:0 0 40px #42a5f5; }
+  #p2 { background:#ffee58; } #p2.active { box-shadow:0 0 40px #ffee58; }
+  #p3 { background:#66bb6a; } #p3.active { box-shadow:0 0 40px #66bb6a; }
+  .msg { font-size:1.2rem; min-height:2em; text-align:center; color:#b0b0d0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+    <div class="hud"><span>NIVEL <b id="level">0</b></span><span>ESTADO <b id="status">Listo</b></span></div>
+    <div class="pad-grid">
+        <button class="pad" id="p0"></button><button class="pad" id="p1"></button>
+        <button class="pad" id="p2"></button><button class="pad" id="p3"></button>
+    </div>
+    <div class="msg" id="msg">Repite la secuencia de colores. Cada nivel añade un paso.</div>
+    <button class="btn-neon" id="startBtn">▶ EMPEZAR</button>
+    <a class="back" href="juegos.html">← Volver al Menú</a>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getFirestore, addDoc, collection } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+const firebaseConfig = { apiKey: "AIzaSyBmTBMyE7Y_LgSXH1SrmEv29DLYdxkyUEw", authDomain: "compartir-textos-app.firebaseapp.com", projectId: "compartir-textos-app", storageBucket: "compartir-textos-app.firebasestorage.app", messagingSenderId: "705083380628", appId: "1:705083380628:web:ce267570e09e3ef1b27581" };
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+let currentUser = null;
+onAuthStateChanged(auth, (u) => { if (u) currentUser = u; else window.location.href = '../index.html'; });
+
+const pads=[...document.querySelectorAll('.pad')];
+const FREQ=[329.6,392,466.2,523.2]; // sonidos distintos por pad
+let seq=[], idx=0, accepting=false, audioCtx=null;
+
+function tone(i,dur=300){
+  try{
+    audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();
+    const o=audioCtx.createOscillator(), g=audioCtx.createGain();
+    o.frequency.value=FREQ[i]; o.type='sine';
+    g.gain.setValueAtTime(.25,audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+dur/1000);
+    o.connect(g).connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime+dur/1000);
+  }catch(e){}
+}
+function flash(i,dur=350){ pads[i].classList.add('active'); tone(i,dur); setTimeout(()=>pads[i].classList.remove('active'),dur); }
+function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+
+async function playSeq(){
+  accepting=false; document.getElementById('status').innerText='Observa...';
+  await sleep(500);
+  for(const s of seq){ flash(s); await sleep(500); }
+  accepting=true; idx=0; document.getElementById('status').innerText='¡Tu turno!';
+}
+function nextLevel(){
+  seq.push(Math.floor(Math.random()*4));
+  document.getElementById('level').innerText=seq.length-1;
+  playSeq();
+}
+pads.forEach((p,i)=>p.addEventListener('click',()=>{
+  if(!accepting)return;
+  flash(i,180);
+  if(seq[idx]!==i){ fail(); return; }
+  idx++;
+  if(idx===seq.length){ accepting=false; setTimeout(nextLevel,600); }
+}));
+function fail(){
+  accepting=false;
+  document.getElementById('status').innerText='❌ Fallaste';
+  document.getElementById('msg').innerText=`Llegaste al nivel ${seq.length-1}. ¡Inténtalo de nuevo!`;
+  const lvl=seq.length-1; seq=[];
+  if(currentUser&&lvl>0)addDoc(collection(db,"scores"),{userId:currentUser.uid,gameId:'simon',score:lvl,timestamp:Date.now()}).catch(()=>{});
+  pads.forEach(p=>{p.classList.add('active')}); setTimeout(()=>pads.forEach(p=>p.classList.remove('active')),400);
+}
+document.getElementById('startBtn').addEventListener('click',()=>{
+  seq=[]; document.getElementById('msg').innerText='¡Concentración!';
+  document.getElementById('startBtn').style.display='none';
+  nextLevel();
+});
+</script>
+</body>
+</html>

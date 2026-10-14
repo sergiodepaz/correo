@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Buscaminas Neón - Sergio's Arcade</title>
+<link rel="stylesheet" href="arcade.css">
+<style>
+  #board { display:grid; gap:4px; margin:24px auto; background:rgba(255,255,255,.04); padding:10px; border-radius:14px; touch-action:manipulation; }
+  .cell { width:34px; height:34px; border-radius:7px; border:none; cursor:pointer; font-weight:800; font-size:1rem;
+          background:linear-gradient(135deg,#667eea33,#764ba233); color:#fff; transition:transform .08s, filter .15s; }
+  .cell:hover { filter:brightness(1.4); transform:scale(1.05); }
+  .cell.open { background:#12122a; cursor:default; box-shadow:inset 0 0 8px rgba(0,0,0,.6); }
+  .cell.flag { background:#ff9800; color:#000; }
+  .c1{color:#42a5f5}.c2{color:#66bb6a}.c3{color:#ff5252}.c4{color:#ab47bc}.c5{color:#ffee58}.c6{color:#00f2fe}.c7{color:#fff}.c8{color:#aaa}
+  .opts { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+  .opts button.sel { outline:2px solid #00f2fe; }
+</style>
+</head>
+<body>
+<div class="wrap">
+    <div class="hud"><span>MINAS 💣 <b id="mines">10</b></span><span>TIEMPO ⏱ <b id="time">0</b></span><span>BANDERAS 🚩 <b id="flags">0</b></span></div>
+    <div class="opts">
+        <button class="btn-neon sel" data-n="9" data-m="10">Fácil 9×9</button>
+        <button class="btn-neon" data-n="12" data-m="22">Medio 12×12</button>
+        <button class="btn-neon" data-n="16" data-m="40">Duro 16×16</button>
+    </div>
+    <div id="board"></div>
+    <div class="hud" id="msg" style="justify-content:center;color:#b0b0d0">Clic para abrir · Clic derecho / mantener pulsado para bandera</div>
+    <a class="back" href="juegos.html">← Volver al Menú</a>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getFirestore, addDoc, collection } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+const firebaseConfig = { apiKey: "AIzaSyBmTBMyE7Y_LgSXH1SrmEv29DLYdxkyUEw", authDomain: "compartir-textos-app.firebaseapp.com", projectId: "compartir-textos-app", storageBucket: "compartir-textos-app.firebasestorage.app", messagingSenderId: "705083380628", appId: "1:705083380628:web:ce267570e09e3ef1b27581" };
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+let currentUser = null;
+onAuthStateChanged(auth, (u) => { if (u) currentUser = u; else window.location.href = '../index.html'; });
+
+let N=9,M=10,grid,cells,openCount,flags,started,timer,t0,over;
+const board=document.getElementById('board');
+
+function build(){
+  clearInterval(timer); started=false; over=false; openCount=0; flags=0; t0=Date.now();
+  grid=Array.from({length:N},(_,r)=>Array.from({length:N},(_,c)=>({r,c,mine:false,open:false,flag:false,n:0})));
+  let placed=0;
+  while(placed<M){ const r=Math.floor(Math.random()*N),c=Math.floor(Math.random()*N);
+    if(!grid[r][c].mine){grid[r][c].mine=true;placed++;} }
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+    let n=0; eachNear(r,c,g=>{if(g.mine)n++}); grid[r][c].n=n;
+  }
+  board.innerHTML=''; board.style.gridTemplateColumns=`repeat(${N},34px)`;
+  cells=[];
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++){
+    const b=document.createElement('button'); b.className='cell'; b.dataset.r=r; b.dataset.c=c;
+    b.addEventListener('click',()=>reveal(r,c));
+    b.addEventListener('contextmenu',e=>{e.preventDefault();toggleFlag(r,c);});
+    let lp; b.addEventListener('touchstart',()=>lp=setTimeout(()=>{toggleFlag(r,c);lp=null;},450));
+    b.addEventListener('touchend',e=>{if(lp){clearTimeout(lp);}});
+    board.appendChild(b); cells.push(b);
+  }
+  upd();
+}
+function eachNear(r,c,fn){ for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){
+  const rr=r+dr,cc=c+dc; if(rr>=0&&cc>=0&&rr<N&&cc<N&&!(dr===0&&dc===0))fn(grid[rr][cc]); } }
+function cellEl(r,c){return cells[r*N+c];}
+function toggleFlag(r,c){ const g=grid[r][c]; if(g.open||over)return;
+  g.flag=!g.flag; flags+=g.flag?1:-1; cellEl(r,c).classList.toggle('flag',g.flag);
+  cellEl(r,c).textContent=g.flag?'🚩':''; upd(); }
+function reveal(r,c){
+  if(over)return; const g=grid[r][c]; if(g.open||g.flag)return;
+  if(!started){ started=true; timer=setInterval(()=>{document.getElementById('time').innerText=Math.floor((Date.now()-t0)/1000);},500); }
+  g.open=true; cellEl(r,c).classList.add('open');
+  if(g.mine){ cellEl(r,c).textContent='💣'; cellEl(r,c).style.background='#c62828'; return lose(false); }
+  openCount++;
+  if(g.n>0){ cellEl(r,c).textContent=g.n; cellEl(r,c).classList.add('c'+g.n); }
+  else { cellEl(r,c).textContent=''; eachNear(r,c,ng=>{ if(!ng.open)reveal(ng.r,ng.c); }); }
+  if(openCount===N*N-M)win();
+  upd();
+}
+function upd(){ document.getElementById('mines').innerText=M; document.getElementById('flags').innerText=flags; }
+function revealAllMines(){ for(let r=0;r<N;r++)for(let c=0;c<N;c++){const g=grid[r][c];
+  if(g.mine&&!g.open){cellEl(r,c).textContent='💣';cellEl(r,c).classList.add('open');cellEl(r,c).style.background='#4a1010';}}}
+function win(){
+  over=true; clearInterval(timer);
+  const secs=Math.floor((Date.now()-t0)/1000);
+  const score=Math.max(100, N*N*100 - secs*10 - M*5);
+  document.getElementById('msg').innerText=`🎉 ¡Campo despejado en ${secs}s! +${score} pts`;
+  if(currentUser)addDoc(collection(db,"scores"),{userId:currentUser.uid,gameId:'minas',score,timestamp:Date.now()}).catch(()=>{});
+}
+function lose(chord){
+  over=true; clearInterval(timer); revealAllMines();
+  document.getElementById('msg').innerText='💥 ¡Boom! Has pisado una mina. Pulsa un tamaño para reiniciar.';
+}
+document.querySelectorAll('.opts button').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('.opts button').forEach(x=>x.classList.remove('sel'));
+  b.classList.add('sel'); N=+b.dataset.n; M=+b.dataset.m; build();
+}));
+build();
+</script>
+</body>
+</html>

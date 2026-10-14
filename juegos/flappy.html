@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flappy Pájaro - Sergio's Arcade</title>
+<link rel="stylesheet" href="arcade.css">
+</head>
+<body>
+<div class="wrap">
+    <div class="hud"><span>PUNTOS <b id="score">0</b></span><span>RÉCORD <b id="best">0</b></span></div>
+    <canvas id="game"></canvas>
+    <div class="overlay" id="overlay">
+        <h2>🐤 FLAPPY SERGIO</h2>
+        <p>Clic / Espacio / Toca para aletear. Esquiva los tubos.</p>
+        <button class="btn-neon" id="startBtn">▶ JUGAR</button>
+    </div>
+    <a class="back" href="juegos.html">← Volver al Menú</a>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getFirestore, addDoc, collection } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+const firebaseConfig = { apiKey: "AIzaSyBmTBMyE7Y_LgSXH1SrmEv29DLYdxkyUEw", authDomain: "compartir-textos-app.firebaseapp.com", projectId: "compartir-textos-app", storageBucket: "compartir-textos-app.firebasestorage.app", messagingSenderId: "705083380628", appId: "1:705083380628:web:ce267570e09e3ef1b27581" };
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+let currentUser = null;
+onAuthStateChanged(auth, (u) => { if (u) currentUser = u; else window.location.href = '../index.html'; });
+
+const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
+const W=380,H=540; canvas.width=W; canvas.height=H;
+const overlay=document.getElementById('overlay');
+const GAP=140, PIPE_W=58, GRAV=0.45, FLAP=-7.6, SPEED=2.6;
+let bird,pipes,score,running=false,raf,frame=0,best=+(localStorage.getItem('flappy_best')||0);
+document.getElementById('best').innerText=best;
+
+function init(){ bird={x:90,y:H/2,v:0,r:15,rot:0}; pipes=[{x:W+60,gap:Math.random()*(H-220)+90,passed:false}]; score=0; frame=0;
+  document.getElementById('score').innerText=0; }
+
+function flap(){ if(running)bird.v=FLAP; }
+document.addEventListener('keydown',e=>{ if(e.code==='Space'){e.preventDefault();flap();} });
+canvas.addEventListener('mousedown',flap);
+canvas.addEventListener('touchstart',e=>{e.preventDefault();flap();},{passive:false});
+
+function loop(){
+  if(!running)return;
+  frame++;
+  bird.v+=GRAV; bird.y+=bird.v;
+  bird.rot=Math.max(-.5,Math.min(1.2,bird.v/10));
+  const last=pipes[pipes.length-1];
+  if(last.x<W-180)pipes.push({x:W+40,gap:Math.random()*(H-240)+100,passed:false});
+  for(const p of pipes)p.x-=SPEED;
+  if(pipes[0].x<-PIPE_W)pipes.shift();
+  // colisiones
+  if(bird.y<H&&bird.y+bird.r>H-40){} 
+  if(bird.y+bird.r>H-40||bird.y<0)return die();
+  for(const p of pipes){
+    if(bird.x+bird.r>p.x&&bird.x-bird.r<p.x+PIPE_W){
+      if(bird.y-bird.r<p.gap-GAP/2||bird.y+bird.r>p.gap+GAP/2)return die();
+    }
+    if(!p.passed&&p.x+PIPE_W<bird.x){p.passed=true;score++;document.getElementById('score').innerText=score;}
+  }
+  // cielo degradado
+  const g=ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,'#1a1a4e');g.addColorStop(1,'#4a2c6d');
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+  // estrellas decorativas
+  ctx.fillStyle='rgba(255,255,255,.3)';
+  for(let i=0;i<20;i++)ctx.fillRect((i*97+frame*0.2)%W,(i*53)% (H-120),2,2);
+  // tubos neón
+  for(const p of pipes){
+    ctx.fillStyle='#00e676'; ctx.shadowColor='#00e676'; ctx.shadowBlur=10;
+    ctx.fillRect(p.x,0,PIPE_W,p.gap-GAP/2);
+    ctx.fillRect(p.x,p.gap+GAP/2,PIPE_W,H-40-(p.gap+GAP/2));
+    ctx.shadowBlur=0;
+    ctx.fillStyle='#00c853';
+    ctx.fillRect(p.x-4,p.gap-GAP/2-18,PIPE_W+8,18);
+    ctx.fillRect(p.x-4,p.gap+GAP/2,PIPE_W+8,18);
+  }
+  // suelo
+  ctx.fillStyle='#2d2d55'; ctx.fillRect(0,H-40,W,40);
+  ctx.fillStyle='#667eea'; for(let i=0;i<W;i+=24)ctx.fillRect((i-frame*SPEED%24+24)%W,H-40,12,4);
+  // pájaro
+  ctx.save(); ctx.translate(bird.x,bird.y); ctx.rotate(bird.rot);
+  ctx.font='30px serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('🐤',0,0);
+  ctx.restore();
+  raf=requestAnimationFrame(loop);
+}
+function start(){ init(); running=true; overlay.style.display='none'; loop(); }
+function die(){
+  running=false; cancelAnimationFrame(raf);
+  if(score>best){best=score;localStorage.setItem('flappy_best',best);document.getElementById('best').innerText=best;}
+  overlay.style.display='flex';
+  overlay.querySelector('h2').innerText=`💀 ¡CHOCASTE! ${score} pts`;
+  overlay.querySelector('p').innerText=`Tu récord: ${best}`;
+  document.getElementById('startBtn').innerText='🔄 OTRA VEZ';
+  if(currentUser&&score>0)addDoc(collection(db,"scores"),{userId:currentUser.uid,gameId:'flappy',score,timestamp:Date.now()}).catch(()=>{});
+}
+document.getElementById('startBtn').addEventListener('click',start);
+</script>
+</body>
+</html>

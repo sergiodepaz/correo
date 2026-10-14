@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rompe Ladrillos - Sergio's Arcade</title>
+<link rel="stylesheet" href="arcade.css">
+</head>
+<body>
+<div class="wrap">
+    <div class="hud">
+        <span>PUNTOS <b id="score">0</b></span>
+        <span>VIDAS <b id="lives">❤️❤️❤️</b></span>
+        <span>NIVEL <b id="level">1</b></span>
+    </div>
+    <canvas id="game"></canvas>
+    <div class="overlay" id="overlay">
+        <h2>🧱 ROMPE LADRILLOS</h2>
+        <p>Mueve con ← → o el ratón. Rebotar, romper, repetir.</p>
+        <button class="btn-neon" id="startBtn">▶ JUGAR</button>
+    </div>
+    <a class="back" href="juegos.html">← Volver al Menú</a>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getFirestore, addDoc, collection } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+const firebaseConfig = { apiKey: "AIzaSyBmTBMyE7Y_LgSXH1SrmEv29DLYdxkyUEw", authDomain: "compartir-textos-app.firebaseapp.com", projectId: "compartir-textos-app", storageBucket: "compartir-textos-app.firebasestorage.app", messagingSenderId: "705083380628", appId: "1:705083380628:web:ce267570e09e3ef1b27581" };
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+let currentUser = null;
+onAuthStateChanged(auth, (u) => { if (u) currentUser = u; else window.location.href = '../index.html'; });
+
+const canvas = document.getElementById('game'), ctx = canvas.getContext('2d');
+const W = 480, H = 560; canvas.width = W; canvas.height = H;
+const overlay = document.getElementById('overlay');
+
+const COLORS = ['#ff5252','#ff9800','#ffee58','#66bb6a','#42a5f5','#ab47bc'];
+let paddle, ball, bricks, score, lives, level, running=false, raf, particles=[], mx=null;
+
+function makeBricks(){
+  bricks=[];
+  const rows=4+Math.min(level,4), cols=9, bw=(W-20)/cols, bh=22;
+  for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
+    bricks.push({x:10+c*bw,y:60+r*(bh+6),w:bw-4,h:bh,color:COLORS[r%COLORS.length],hits:(r===0&&level>2)?2:1});
+  }
+}
+function resetBall(){
+  ball={x:W/2,y:H-70,r:8,vx:(Math.random()<.5?-1:1)*3,vy:-4.5};
+}
+function init(){
+  paddle={x:W/2-50,w:100,h:14};
+  score=0; lives=3; level=1; particles=[];
+  makeBricks(); resetBall(); updateHud();
+}
+function updateHud(){
+  document.getElementById('score').innerText=score;
+  document.getElementById('lives').innerText='❤️'.repeat(lives)||'—';
+  document.getElementById('level').innerText=level;
+}
+function burst(x,y,color){
+  for(let i=0;i<10;i++)particles.push({x,y,vx:(Math.random()-.5)*6,vy:(Math.random()-.5)*6,life:30,color});
+}
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowLeft')mx=null,paddle.x=Math.max(0,paddle.x-38);
+  if(e.key==='ArrowRight')mx=null,paddle.x=Math.min(W-paddle.w,paddle.x+38);
+});
+canvas.addEventListener('mousemove',e=>{ const r=canvas.getBoundingClientRect(); mx=(e.clientX-r.left)*(W/r.width); });
+canvas.addEventListener('touchmove',e=>{ e.preventDefault(); const r=canvas.getBoundingClientRect(); mx=(e.touches[0].clientX-r.left)*(W/r.width); },{passive:false});
+
+function loop(){
+  if(!running)return;
+  if(mx!==null)paddle.x=Math.max(0,Math.min(W-paddle.w,mx-paddle.w/2));
+  // física
+  ball.x+=ball.vx; ball.y+=ball.vy;
+  if(ball.x<ball.r||ball.x>W-ball.r)ball.vx*=-1;
+  if(ball.y<ball.r)ball.vy*=-1;
+  if(ball.y>H-ball.r&&ball.x>paddle.x&&ball.x<paddle.x+paddle.w){
+    const hit=(ball.x-(paddle.x+paddle.w/2))/(paddle.w/2);
+    const sp=Math.min(7,Math.hypot(ball.vx,ball.vy)+0.15);
+    const ang=hit*Math.PI/3;
+    ball.vx=sp*Math.sin(ang); ball.vy=-sp*Math.cos(ang);
+    burst(ball.x,ball.y,'#00f2fe');
+  }
+  if(ball.y>H+20){
+    lives--; updateHud();
+    if(lives<=0)return gameOver();
+    resetBall();
+  }
+  for(let i=bricks.length-1;i>=0;i--){
+    const b=bricks[i];
+    if(ball.x>b.x-ball.r&&ball.x<b.x+b.w+ball.r&&ball.y>b.y-ball.r&&ball.y<b.y+b.h+ball.r){
+      ball.vy*=-1; b.hits--;
+      burst(b.x+b.w/2,b.y+b.h/2,b.color);
+      if(b.hits<=0){bricks.splice(i,1);score+=10;updateHud();}
+      break;
+    }
+  }
+  if(bricks.length===0){level++;score+=100;makeBricks();resetBall();updateHud();}
+
+  // dibujo
+  ctx.clearRect(0,0,W,H);
+  for(const b of bricks){
+    ctx.fillStyle=b.color; ctx.shadowColor=b.color; ctx.shadowBlur=8;
+    ctx.fillRect(b.x,b.y,b.w,b.h); ctx.shadowBlur=0;
+    if(b.hits>1){ctx.strokeStyle='rgba(255,255,255,.7)';ctx.strokeRect(b.x+3,b.y+3,b.w-6,b.h-6);}
+  }
+  ctx.fillStyle='#667eea'; ctx.shadowColor='#667eea'; ctx.shadowBlur=12;
+  ctx.beginPath(); ctx.roundRect(paddle.x,paddle.y||H-30,paddle.w,paddle.h,7); ctx.fill();
+  ctx.fillStyle='#fff'; ctx.shadowColor='#00f2fe';
+  ctx.beginPath(); ctx.arc(ball.x,ball.y,ball.r,0,7); ctx.fill(); ctx.shadowBlur=0;
+  for(let i=particles.length-1;i>=0;i--){const p=particles[i];p.x+=p.vx;p.y+=p.vy;p.life--;
+    ctx.globalAlpha=p.life/30; ctx.fillStyle=p.color; ctx.fillRect(p.x,p.y,3,3); ctx.globalAlpha=1;}
+  raf=requestAnimationFrame(loop);
+}
+function start(){ if(running)return; init(); running=true; overlay.style.display='none'; loop(); }
+function gameOver(){
+  running=false; cancelAnimationFrame(raf);
+  overlay.style.display='flex';
+  overlay.querySelector('h2').innerText=`💥 FIN — ${score} puntos`;
+  overlay.querySelector('p').innerText='La bola se escapó. ¿Otra ronda?';
+  document.getElementById('startBtn').innerText='🔄 REINTENTAR';
+  if(currentUser&&score>0)addDoc(collection(db,"scores"),{userId:currentUser.uid,gameId:'rompebricks',score,timestamp:Date.now()}).catch(()=>{});
+}
+document.getElementById('startBtn').addEventListener('click',start);
+</script>
+</body>
+</html>

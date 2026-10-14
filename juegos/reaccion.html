@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Test de Reacción - Sergio's Arcade</title>
+<link rel="stylesheet" href="arcade.css">
+<style>
+  #zone { width:min(92vw,520px); height:340px; border-radius:20px; display:flex; flex-direction:column;
+          align-items:center; justify-content:center; cursor:pointer; user-select:none; margin:26px auto;
+          background:#302b63; border:2px solid rgba(255,255,255,.12); transition:background .1s; text-align:center; }
+  #zone.wait { background:#c62828; }
+  #zone.go { background:#2e7d32; }
+  #zone h2 { font-size:1.8rem; margin-bottom:8px; }
+  .avg { font-size:1.1rem; color:#b0b0d0; text-align:center; }
+  .avg b { color:#00f2fe; }
+</style>
+</head>
+<body>
+<div class="wrap">
+    <div class="hud"><span>ÚLTIMO <b id="last">—</b></span><span>PROMEDIO 5 <b id="avg">—</b></span></div>
+    <div id="zone"><h2>🧠 TEST DE REACCIÓN</h2><p>Cuando el panel se ponga VERDE, haz clic lo más rápido posible.<br>Si haces clic en rojo, cuenta como falsa salida.</p></div>
+    <div class="avg" id="stats">Pulsa el panel para comenzar la ronda</div>
+    <a class="back" href="juegos.html">← Volver al Menú</a>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getFirestore, addDoc, collection } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+const firebaseConfig = { apiKey: "AIzaSyBmTBMyE7Y_LgSXH1SrmEv29DLYdxkyUEw", authDomain: "compartir-textos-app.firebaseapp.com", projectId: "compartir-textos-app", storageBucket: "compartir-textos-app.firebasestorage.app", messagingSenderId: "705083380628", appId: "1:705083380628:web:ce267570e09e3ef1b27581" };
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+let currentUser = null;
+onAuthStateChanged(auth, (u) => { if (u) currentUser = u; else window.location.href = '../index.html'; });
+
+const zone=document.getElementById('zone');
+let state='idle', t0=0, timer=null, results=[];
+
+function idle(){ state='idle'; zone.className=''; zone.innerHTML='<h2>🧠 LISTO</h2><p>Haz clic para iniciar la ronda (espera el verde)</p>'; }
+function arm(){
+  state='wait'; zone.className='wait'; zone.innerHTML='<h2>⏳ ESPERA...</h2><p>No hagas clic todavía</p>';
+  const delay=1200+Math.random()*3200;
+  timer=setTimeout(()=>{
+    state='go'; zone.className='go'; zone.innerHTML='<h2>¡YA! 👆</h2><p>¡CLIC AHORA!</p>';
+    t0=performance.now();
+  },delay);
+}
+zone.addEventListener('click',()=>{
+  if(state==='idle'||state==='done'){ arm(); return; }
+  if(state==='wait'){ clearTimeout(timer); state='done';
+    zone.className=''; zone.innerHTML='<h2>🚫 FALSA SALIDA</h2><p>Hiciste clic antes de tiempo. Clic para reintentar.</p>';
+    document.getElementById('stats').innerText='Falsa salida: penalización de 700 ms añadida a tu próxima marca si quieres... o solo reinicia 😅';
+    return; }
+  if(state==='go'){
+    const ms=Math.round(performance.now()-t0);
+    results.push(ms); if(results.length>5)results.shift();
+    document.getElementById('last').innerText=ms+' ms';
+    const avg=Math.round(results.reduce((a,b)=>a+b,0)/results.length);
+    document.getElementById('avg').innerText=avg+' ms';
+    let rank = ms<180?'⚡ Reflexes sobrehumanos':ms<250?'🔥 Muy rápido':ms<350?'👍 Promedio decente':'🐢 Un cafecito antes?';
+    zone.className=''; zone.innerHTML=`<h2>⏱️ ${ms} ms</h2><p>${rank}</p>`;
+    state='done';
+    document.getElementById('stats').innerText=`Muestras: ${results.join(', ')} ms`;
+    const score=Math.max(1, Math.round(100000/ms)); // más rápida = más puntos
+    if(currentUser&&results.length>=3)addDoc(collection(db,"scores"),{userId:currentUser.uid,gameId:'reaccion',score,timestamp:Date.now()}).catch(()=>{});
+    setTimeout(()=>{ if(state==='done')zone.innerHTML+='<p style="margin-top:10px;color:#b0b0d0">Clic para otra ronda</p>'; },800);
+  }
+});
+</script>
+</body>
+</html>
