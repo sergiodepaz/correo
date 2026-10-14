@@ -1,0 +1,35 @@
+// ===== EXPLOTA TODO (burbujas + negrietas) =====
+let bub=[],pts=0,spawnT=0,elapsed=0,combo=0,comboT=0,floats=[];
+function reset(){bub=[];pts=0;spawnT=0;elapsed=0;combo=0;floats=[];upd();}
+function upd(){$('pts').innerText=pts;$('tleft').innerText=Math.floor(elapsed)+'s';}
+function update(dt){ elapsed+=dt; if(comboT>0){comboT-=dt;if(comboT<=0)combo=0;}
+  spawnT-=dt;
+  if(spawnT<=0){ const neg=Math.random()<Math.min(.28,.05+elapsed*.004);
+    bub.push({x:rnd(30,W-30),y:-30,r:rnd(20,44),v:rnd(60,110)+elapsed*2.2,c:neg?'NEG':Math.floor(rnd(0,5)),wob:rnd(0,6.28)});
+    spawnT=Math.max(.16,.7-elapsed*.008);}
+  bub.forEach(b=>{b.y+=b.v*dt;b.wob+=dt*3;b.x+=Math.sin(b.wob)*20*dt;});
+  bub=bub.filter(b=>b.y-b.r<=H);
+  floats.forEach(f=>{f.y-=40*dt;f.l-=dt;});floats=floats.filter(f=>f.l>0);
+  upd();
+}
+const PAL=['#ff4d6d','#4d9dff','#3dff8e','#ffd93d','#c14dff'];
+function draw(){ctx.fillStyle='#0f0f1a';ctx.fillRect(0,0,W,H);
+  ctx.textAlign='center';
+  bub.forEach(b=>{const c=b.c==='NEG'?'#151515':PAL[b.c];
+    ctx.shadowColor=c;ctx.shadowBlur=18;ctx.fillStyle=c;
+    ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,7);ctx.fill();ctx.shadowBlur=0;
+    ctx.fillStyle='rgba(255,255,255,.8)';ctx.beginPath();ctx.arc(b.x-b.r*.3,b.y-b.r*.35,b.r*.16,0,7);ctx.fill();
+    if(b.c==='NEG'){ctx.font=`${b.r}px serif`;ctx.fillText('💀',b.x,b.y+b.r*.35);}
+  });
+  floats.forEach(f=>{ctx.globalAlpha=Math.max(0,f.l);ctx.fillStyle=f.col;ctx.font='800 22px Segoe UI';ctx.fillText(f.t,f.x,f.y);ctx.globalAlpha=1;});
+  if(combo>1){ctx.fillStyle='#ffd93d';ctx.font='800 20px Segoe UI';ctx.fillText('COMBO x'+combo,W/2,30);}
+}
+cv.addEventListener('pointerdown',e=>{const r=cv.getBoundingClientRect();
+  const x=(e.clientX-r.left)*W/r.width,y=(e.clientY-r.top)*H/r.height;
+  for(let i=bub.length-1;i>=0;i--){const b=bub[i];if(Math.hypot(x-b.x,y-b.y)<b.r+6){
+    if(b.c==='NEG'){addScore(pts);return endRun('💀 TOCASTE LA NEGRIETA',`Aguantaste ${Math.floor(elapsed)}s · ${pts} puntos`);}
+    combo++;comboT=1.2;const gain=5*combo;pts+=gain;
+    floats.push({x:b.x,y:b.y,l:1,t:'+'+gain,col:'#3dff8e'});beep(500+combo*60,.06,'square');
+    bub.splice(i,1);upd();return;}}
+});
+function addScore(n){if(currentUser&&n>0)addDoc(collection(db,"scores"),{userId:currentUser.uid,gameId:GAME_ID,score:n,timestamp:new Date()}).then(loadBest).catch(()=>{});}

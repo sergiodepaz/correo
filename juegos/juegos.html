@@ -179,6 +179,79 @@
             .games-grid { grid-template-columns: 1fr; }
             header { flex-direction: column; gap: 20px; text-align: center; }
         }
+
+        /* ===== Menú de categorías ===== */
+        .cat-menu {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+            margin: 10px 0 20px;
+            position: sticky;
+            top: 8px;
+            z-index: 50;
+            padding: 10px;
+            background: rgba(15, 12, 41, 0.8);
+            backdrop-filter: blur(12px);
+            border-radius: 18px;
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+        .cat-btn {
+            padding: 9px 18px;
+            border-radius: 30px;
+            border: 1px solid rgba(255,255,255,0.15);
+            background: rgba(255,255,255,0.05);
+            color: white;
+            font-weight: 700;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            font-family: inherit;
+        }
+        .cat-btn:hover { border-color: var(--primary); transform: translateY(-2px); }
+        .cat-btn.active {
+            background: linear-gradient(90deg, var(--primary), #00f2fe);
+            color: #04121f;
+            border-color: transparent;
+            box-shadow: 0 5px 20px rgba(0, 242, 254, 0.35);
+        }
+        .search-row {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 26px;
+        }
+        .search-input {
+            flex: 1;
+            padding: 12px 18px;
+            border-radius: 14px;
+            border: 1px solid rgba(255,255,255,0.15);
+            background: var(--card-bg);
+            color: white;
+            font-size: 1rem;
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.25s;
+        }
+        .search-input:focus { border-color: var(--primary); box-shadow: 0 0 12px rgba(102,126,234,.35); }
+        .game-count { color: #b0b0d0; font-size: 0.85rem; white-space: nowrap; }
+        .cat-label {
+            grid-column: 1 / -1;
+            font-size: 1.1rem;
+            font-weight: 800;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: #00f2fe;
+            margin: 18px 0 -6px;
+            text-shadow: 0 0 14px rgba(0,242,254,.4);
+        }
+        .empty-msg {
+            grid-column: 1 / -1;
+            text-align: center;
+            color: #b0b0d0;
+            padding: 60px 0;
+            font-size: 1.1rem;
+        }
     </style>
 </head>
 <body>
@@ -188,6 +261,21 @@
         <h1>🎮 ARCADE PERSONAL</h1>
         <a href="../index.html" class="back-btn">← Volver al Hub</a>
     </header>
+
+    <nav class="cat-menu" id="catMenu">
+        <button class="cat-btn active" data-cat="todos">🎮 Todos</button>
+        <button class="cat-btn" data-cat="nuevos">✨ Novedades</button>
+        <button class="cat-btn" data-cat="accion">💥 Acción</button>
+        <button class="cat-btn" data-cat="reflejos">⚡ Reflejos</button>
+        <button class="cat-btn" data-cat="mentes">🧠 Para Mentes</button>
+        <button class="cat-btn" data-cat="caos">🤪 Caos Total</button>
+        <button class="cat-btn" data-cat="clasicos">👴 Clásicos</button>
+    </nav>
+
+    <div class="search-row">
+        <input type="text" id="buscador" class="search-input" placeholder="🔍 Buscar juego..." autocomplete="off">
+        <span class="game-count" id="gameCount"></span>
+    </div>
 
     <div id="games-container" class="games-grid">
         <div class="loading">

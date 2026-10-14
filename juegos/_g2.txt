@@ -1,0 +1,37 @@
+// ===== LOS TOPILLOS (whack-a-mole) =====
+document.getElementById('gc').innerHTML='<div id="grid"></div>';
+const gridEl=document.getElementById('grid');
+gridEl.style.cssText='display:grid;grid-template-columns:repeat(3,1fr);gap:14px;width:min(92vw,460px)';
+const holes=[];
+for(let i=0;i<9;i++){ const h=document.createElement('div');
+  h.style.cssText='aspect-ratio:1;border-radius:50%;background:radial-gradient(circle at 50% 30%,#3a2d1a,#1a1208);border:3px solid rgba(102,126,234,.35);display:flex;align-items:center;justify-content:center;font-size:clamp(2.2rem,8vw,3.4rem);cursor:pointer;user-select:none;transition:transform .08s';
+  holes.push({el:h,who:null,t:0}); gridEl.appendChild(h); }
+let pts=0,combo=1,timeLeft=60,spawnT=0,hits=0,misses=0,over=false;
+const KINDS=[{e:'🐹',p:10},{e:'🐹',p:10},{e:'🐹',p:10},{e:'🐹',p:10},{e:'✨',p:50,gold:true},{e:'🦔',p:-30,hedgehog:true}];
+function reset(){ pts=0;combo=1;timeLeft=60;spawnT=.4;hits=0;misses=0;over=false; holes.forEach(h=>{h.who=null;h.el.textContent='';}); upd(); }
+function upd(){ $('pts').innerText=pts; $('cmb').innerText='x'+combo; $('tleft').innerText=Math.ceil(timeLeft); }
+function update(dt){ if(over)return;
+  timeLeft-=dt; if(timeLeft<=0){ over=true; return finish(); }
+  spawnT-=dt;
+  if(spawnT<=0){ const free=holes.filter(h=>!h.who);
+    if(free.length){ const h=free[Math.floor(Math.random()*free.length)];
+      let k=KINDS[Math.floor(Math.random()*KINDS.length)];
+      h.who=k; h.t=(k.gold?1.1:k.hedgehog?1.6:Math.max(.55,1.5-timeLeft*.012));
+      h.el.textContent=k.e; }
+    spawnT=Math.max(.28,.75-timeLeft*.006)+Math.random()*.3; }
+  holes.forEach(h=>{ if(h.who){ h.t-=dt; if(h.t<=0){ if(!h.who.hedgehog) combo=1; h.who=null; h.el.textContent=''; upd(); } } });
+}
+function draw(){}
+gridEl.addEventListener('pointerdown',e=>{ if(!running||over)return;
+  let el=e.target; while(el&&el.parentElement!==gridEl)el=el.parentElement; if(!el||el.parentElement!==gridEl)return;
+  const h=holes[Array.from(gridEl.children).indexOf(el)];
+  if(h.who){ const k=h.who;
+    if(k.hedgehog){ pts=Math.max(0,pts+k.p); combo=1; misses++; beep(120,.2,'sawtooth'); }
+    else { pts+=k.p*combo; hits++; combo=Math.min(8,combo+1); beep(k.gold?1400:800,.07,'square'); }
+    h.who=null; h.el.textContent=''; upd();
+  } else { combo=Math.max(1,combo-1); beep(200,.05,'triangle'); upd(); }
+});
+function finish(){ addScore(pts);
+  endRun(pts>=800?'👑 MAZADOR LEGENDARIO':pts>=400?'🔨 BUEN MAZAZO':'😅 SIGA PRACTICANDO',
+    `Puntos: ${pts} · Aciertos: ${hits} · Fallos: ${misses}`); }
+function addScore(n){ if(currentUser&&n>0)addDoc(collection(db,"scores"),{userId:currentUser.uid,gameId:GAME_ID,score:n,timestamp:new Date()}).then(loadBest).catch(()=>{}); }

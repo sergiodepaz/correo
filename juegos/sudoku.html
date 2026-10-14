@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sudoku Neón - Sergio's Arcade</title>
+<link rel="stylesheet" href="arcade.css">
+<style>
+  .board { display:grid; grid-template-columns:repeat(9,1fr); width:min(92vw,430px); aspect-ratio:1;
+           background:#0f0f1a; border:2px solid var(--primary); border-radius:12px; overflow:hidden;
+           box-shadow:0 0 30px rgba(102,126,234,.35); }
+  .cell { position:relative; display:flex; align-items:center; justify-content:center;
+          font-size:clamp(1rem,4.5vw,1.5rem); font-weight:700; color:var(--accent); cursor:pointer;
+          border-right:1px solid rgba(255,255,255,.08); border-bottom:1px solid rgba(255,255,255,.08);
+          user-select:none; transition:background .15s; }
+  .cell:nth-child(9n) { border-right:none; }
+  .cell:nth-child(n+64) { border-bottom:none; }
+  .cell.bR { border-right:2px solid rgba(102,126,234,.7); }
+  .cell.bB { border-bottom:2px solid rgba(102,126,234,.7); }
+  .cell.given { color:#fff; }
+  .cell.sel { background:rgba(102,126,234,.4); }
+  .cell.peer { background:rgba(102,126,234,.12); }
+  .cell.same { background:rgba(0,242,254,.18); }
+  .cell.err::after { content:''; position:absolute; inset:0; background:rgba(255,60,60,.35); }
+  .note { position:absolute; top:2px; left:3px; font-size:.55em; color:#8fd8ff; opacity:.85; line-height:1; white-space:pre; font-weight:400; }
+  .pad { display:grid; grid-template-columns:repeat(5,1fr); gap:8px; width:min(92vw,430px); margin-top:14px; }
+  .pad button { padding:12px 0; font-size:1.15rem; font-weight:700; border-radius:10px; cursor:pointer;
+                background:rgba(255,255,255,.07); color:var(--text); border:1px solid rgba(255,255,255,.15); transition:all .15s; }
+  .pad button:hover { background:var(--primary); }
+  .tools { display:flex; gap:10px; width:min(92vw,430px); margin-top:10px; }
+  .tools button { flex:1; padding:10px; border-radius:10px; cursor:pointer; font-weight:600;
+                  background:rgba(255,255,255,.07); color:var(--muted); border:1px solid rgba(255,255,255,.15); }
+  .tools button.on { background:var(--secondary); color:#fff; }
+  .diffsel { display:flex; gap:8px; margin-bottom:12px; }
+  .diffsel button { padding:8px 14px; border-radius:20px; cursor:pointer; font-weight:700; font-size:.85rem;
+                    background:rgba(255,255,255,.07); color:var(--muted); border:1px solid rgba(255,255,255,.15); }
+  .diffsel button.on { background:linear-gradient(90deg,var(--primary),var(--accent)); color:#04121f; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hud"><span>⏱️<b id="time">0:00</b></span><span>❌ Errores<b id="errs">0</b></span><span>🏆 Récord<b id="best">—</b></span></div>
+  <div class="diffsel">
+    <button data-d="easy" class="on">FÁCIL</button><button data-d="medium">MEDIO</button><button data-d="hard">DIFÍCIL</button>
+  </div>
+  <div class="board" id="board"></div>
+  <div class="pad" id="pad"></div>
+  <div class="tools">
+    <button id="noteBtn">📝 Notas</button>
+    <button id="eraseBtn">⌫ Borrar</button>
+    <button id="hintBtn">💡 Pista (-100)</button>
+    <button id="newBtn">🔄 Nuevo</button>
+  </div>
+  <a href="juegos.html" class="back">← Volver al catálogo</a>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getFirestore, collection, query, where, getDocs, addDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+const app = initializeApp({apiKey:"AIzaSyBmTBMyE7Y_LgSXH1SrmEv29DLYdxkyUEw",authDomain:"compartir-textos-app.firebaseapp.com",projectId:"compartir-textos-app",storageBucket:"compartir-textos-app.firebasestorage.app",messagingSenderId:"705083380628",appId:"1:705083380628:web:ce267570e09e3ef1b27581"});
+const auth = getAuth(app), db = getFirestore(app);
+let currentUser = null, bestScore = 0;
+
+onAuthStateChanged(auth, async u => {
+  if (!u) { window.location.href = '../index.html'; return; }
+  currentUser = u;
+  try {
+    const snap = await getDocs(query(collection(db,"scores"), where("userId","==",u.uid), where("gameId","==","sudoku")));
+    snap.forEach(d => bestScore = Math.max(bestScore, d.data().score));
+    document.getElementById('best').innerText = bestScore || '—';
+  } catch(e){}
+});
+
+// ===== Generador de sudoku =====
+const shuffle = a => { for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];} return a; };
+function generateFull() {
+  const g = Array.from({length:9},()=>Array(9).fill(0));
+  function ok(r,c,v){
+    for(let i=0;i<9;i++){ if(g[r][i]===v||g[i][c]===v) return false; }
+    const br=(r/3|0)*3, bc=(c/3|0)*3;
+    for(let i=0;i<3;i++)for(let j=0;j<3;j++) if(g[br+i][bc+j]===v) return false;
+    return true;
+  }
+  function fill(pos){
+    if(pos===81) return true;
+    const r=pos/9|0, c=pos%9;
+    for(const v of shuffle([1,2,3,4,5,6,7,8,9])){
+      if(ok(r,c,v)){ g[r][c]=v; if(fill(pos+1)) return true; g[r][c]=0; }
+    }
+    return false;
+  }
+  fill(0);
+  // Permutar filas dentro de bandas y columnas dentro de barras para más variedad
+  return g;
+}
+function makePuzzle(diff){
+  const sol = generateFull();
+  const clues = {easy:40, medium:32, hard:26}[diff];
+  const cells = shuffle([...Array(81).keys()]);
+  const puz = sol.map(r=>r.slice());
+  let removed = 0;
+  for(const idx of cells){
+    if(removed >= 81-clues) break;
+    puz[idx/9|0][idx%9] = 0; removed++;
+  }
+  return {puz, sol};
+}
+
+// ===== Estado =====
+let diff='easy', puzzle, solution, given, notes, sel=-1, errs=0, noteMode=false, startT=0, timer=null, finished=false;
+const boardEl = document.getElementById('board');
+
+function newGame(d){
+  diff = d; finished=false; errs=0; noteMode=false; sel=-1;
+  ({puzzle, solution} = makePuzzle(d));
+  given = puzzle.map(r=>r.map(v=>v!==0));
+  notes = Array.from({length:9},()=>Array.from({length:9},()=>new Set()));
+  clearInterval(timer); startT=Date.now();
+  timer=setInterval(()=>{ const s=Math.floor((Date.now()-startT)/1000);
+    document.getElementById('time').innerText = (s/60|0)+':'+String(s%60).padStart(2,'0'); },500);
+  document.getElementById('errs').innerText='0';
+  buildBoard(); refresh();
+}
+
+function buildBoard(){
+  boardEl.innerHTML='';
+  for(let i=0;i<81;i++){
+    const c=document.createElement('div'); c.className='cell';
+    const r=i/9|0, col=i%9;
+    if(col%3===2 && col!==8) c.classList.add('bR');
+    if(r%3===2 && r!==8) c.classList.add('bB');
+    c.addEventListener('click',()=>{ sel=i; refresh(); });
+    boardEl.appendChild(c);
+  }
+}
+
+function refresh(){
+  const sr=sel/9|0, sc=sel%9, sv=sel>=0?puzzle[sr][sc]:0;
+  for(let i=0;i<81;i++){
+    const r=i/9|0, c=i%9, el=boardEl.children[i], v=puzzle[r][c];
+    el.className='cell'+(given[r][c]?' given':'')+(((c%3===2)&&c!==8?' bR':'')+(((r%3===2)&&r!==8?' bB':'')));
+    if(sel>=0 && (i===sel || r===sr || c===sc || ((r/3|0)===(sr/3|0)&&(c/3|0)===(sc/3|0)))) el.classList.add('peer');
+    if(i===sel) el.classList.add('sel');
+    if(v && sv && v===sv && i!==sel) el.classList.add('same');
+    if(!given[r][c] && v && v!==solution[r][c]) el.classList.add('err');
+    el.innerHTML = v ? `<span>${v}</span>` : (notes[r][c].size ? `<span class="note">${[...notes[r][c]].join('\n')}</span>` : '');
+    if(v && !given[r][c] && v===solution[r][c]) el.style.color='#7CFC9A';
+    else el.style.color='';
+  }
+}
+
+function setVal(v){
+  if(sel<0||finished) return;
+  const r=sel/9|0, c=sel%9;
+  if(given[r][c]) return;
+  if(noteMode && v){
+    notes[r][c].has(v)?notes[r][c].delete(v):notes[r][c].add(v);
+    puzzle[r][c]=0;
+  } else if(v){
+    if(puzzle[r][c]!==v && puzzle[r][c]!==0 && puzzle[r][c]!==solution[r][c]) {} 
+    puzzle[r][c]=v; notes[r][c].clear();
+    if(v!==solution[r][c]){ errs++; document.getElementById('errs').innerText=errs;
+      if(errs>=3){ lose(); return; } }
+    else clearPeerNotes(r,c,v);
+  } else { puzzle[r][c]=0; notes[r][c].clear(); }
+  refresh(); checkWin();
+}
+function clearPeerNotes(r,c,v){
+  for(let i=0;i<9;i++){ notes[r][i].delete(v); notes[i][c].delete(v); }
+  const br=(r/3|0)*3, bc=(c/3|0)*3;
+  for(let i=0;i<3;i++)for(let j=0;j<3;j++) notes[br+i][bc+j].delete(v);
+}
+function checkWin(){
+  for(let r=0;r<9;r++)for(let c=0;c<9;c++) if(puzzle[r][c]!==solution[r][c]) return;
+  finished=true; clearInterval(timer);
+  const secs=Math.floor((Date.now()-startT)/1000);
+  const base={easy:2000,medium:3000,hard:4500}[diff];
+  const score=Math.max(100, base - secs*2 - errs*100);
+  setTimeout(async ()=>{
+    alert(`🎉 ¡Sudoku resuelto!\nTiempo: ${secs}s · Errores: ${errs}\nPuntuación: ${score}`);
+    if(currentUser){
+      await addDoc(collection(db,"scores"),{userId:currentUser.uid, gameId:'sudoku', score, timestamp:new Date()}).catch(()=>{});
+      bestScore=Math.max(bestScore,score);
+      document.getElementById('best').innerText=bestScore;
+    }
+  },150);
+}
+function lose(){
+  finished=true; clearInterval(timer);
+  alert('💥 ¡3 errores! Se acabó esta partida.');
+}
+
+// Teclado numérico + táctil
+const padEl=document.getElementById('pad');
+for(let n=1;n<=9;n++){
+  const b=document.createElement('button'); b.innerText=n;
+  b.addEventListener('click',()=>setVal(n)); padEl.appendChild(b);
+}
+document.addEventListener('keydown',e=>{
+  if(e.key>='1'&&e.key<='9') setVal(+e.key);
+  if(e.key==='Backspace'||e.key==='Delete'||e.key==='0') setVal(0);
+  if(sel>=0){
+    const r=sel/9|0,c=sel%9;
+    if(e.key==='ArrowUp'&&r>0) sel-=9; if(e.key==='ArrowDown'&&r<8) sel+=9;
+    if(e.key==='ArrowLeft'&&c>0) sel--; if(e.key==='ArrowRight'&&c<8) sel++;
+    refresh();
+  }
+});
+document.getElementById('noteBtn').onclick=function(){ noteMode=!noteMode; this.classList.toggle('on',noteMode); };
+document.getElementById('eraseBtn').onclick=()=>setVal(0);
+document.getElementById('hintBtn').onclick=()=>{
+  if(sel<0||finished) return;
+  const r=sel/9|0,c=sel%9; if(given[r][c]) return;
+  puzzle[r][c]=solution[r][c]; notes[r][c].clear(); errs++; refresh(); checkWin();
+};
+document.getElementById('newBtn').onclick=()=>newGame(diff);
+document.querySelectorAll('.diffsel button').forEach(b=>b.onclick=function(){
+  document.querySelectorAll('.diffsel button').forEach(x=>x.classList.remove('on'));
+  this.classList.add('on'); newGame(this.dataset.d);
+});
+
+newGame('easy');
+</script>
+</body>
+</html>

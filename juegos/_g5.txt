@@ -1,0 +1,37 @@
+// ===== MATE AL GATO =====
+const bushes=[]; const NX=5,NY=3;
+for(let r=0;r<NY;r++)for(let c=0;c<NX;c++)bushes.push({x:70+c*(W-140)/(NX-1),y:140+r*(H-220)/(NY-1)});
+let cat=-1,reveal=0,hideT=0,hit=0,miss=0,streak=0,maxStreak=0,sp=1.4,scratch=null,meow=0;
+function reset(){ hit=0;miss=0;streak=0;maxStreak=0;sp=1.4;cat=-1;reveal=0;hideT=1;scratch=null;upd(); }
+function upd(){$('hit').innerText=hit;$('mis').innerText=miss;$('streak').innerText=streak;}
+function moveCat(){ let n; do{n=Math.floor(Math.random()*bushes.length);}while(n===cat); cat=n; meow=1;
+  if(Math.random()<.4){ reveal=1.2/Math.max(1,sp); hideT=reveal+.15; } else hideT=.6/sp; }
+function update(dt){ if(!running)return;
+  meow=Math.max(0,meow-dt*2);
+  if(reveal>0)reveal-=dt;
+  hideT-=dt; if(hideT<=0)moveCat();
+  sp=Math.min(3,1.4+hit*.05-miss*.02);
+  if(scratch){scratch.t-=dt;if(scratch.t<=0)scratch=null;}
+}
+function draw(){ ctx.fillStyle='#0f0f1a';ctx.fillRect(0,0,W,H);
+  const g=ctx.createLinearGradient(0,80,0,H);g.addColorStop(0,'#141a2e');g.addColorStop(1,'#0a0d18');ctx.fillStyle=g;ctx.fillRect(0,90,W,H-90);
+  ctx.font='800 26px Segoe UI';ctx.textAlign='center';ctx.fillStyle='rgba(255,255,255,.7)';ctx.fillText('¿DÓNDE SE ESCONDE EL GATO? 🐈',W/2,48);
+  bushes.forEach((b,i)=>{ const near=reveal>0&&i===cat;
+    ctx.globalAlpha=near?.35:1; ctx.font=`${near?60:50}px serif`; ctx.fillText('🌳',b.x,b.y+16); ctx.globalAlpha=1;
+    if(near){ ctx.font='44px serif'; ctx.fillText('🐈',b.x,b.y+8);
+      ctx.fillStyle=`rgba(255,217,61,${Math.min(1,meow)})`; ctx.font='700 15px Segoe UI'; ctx.fillText('¡MIAU!',b.x,b.y-34); }
+  });
+  if(scratch){ ctx.globalAlpha=Math.max(0,scratch.t); ctx.font='30px serif'; ctx.fillText('💅',scratch.x,scratch.y); ctx.globalAlpha=1; }
+}
+cv.addEventListener('pointerdown',e=>{ if(!running)return; const r=cv.getBoundingClientRect();
+  const x=(e.clientX-r.left)*W/r.width,y=(e.clientY-r.top)*H/r.height;
+  let bestI=-1,bd=1e9; bushes.forEach((b,i)=>{const d=Math.hypot(x-b.x,y-b.y);if(d<bd){bd=d;bestI=i}});
+  if(bd<58){
+    if(bestI===cat&&reveal>0){ hit++; streak++; maxStreak=Math.max(maxStreak,streak);
+      beep(900,.07);beep(1300,.09); reveal=0; upd();
+      if(hit>=25){addScore(hit*10+maxStreak*5);running=false;endRun('🏆 CAZADOR ÉLITE',`25 aciertos · Racha máxima ${maxStreak}`);}
+    } else { miss++; streak=0; scratch={x:bushes[bestI].x,y:bushes[bestI].y,t:1}; beep(180,.15,'sawtooth'); upd();
+      if(miss>=5){addScore(hit*10+maxStreak*5);running=false;endRun('🙀 TE HA GANADO EL GATO',`Aciertos: ${hit} · El gato se ríe de ti`);} }
+  }
+});
+function addScore(n){if(currentUser&&n>0)addDoc(collection(db,"scores"),{userId:currentUser.uid,gameId:GAME_ID,score:n,timestamp:new Date()}).then(loadBest).catch(()=>{});}

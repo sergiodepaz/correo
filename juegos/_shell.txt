@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>__TITLE__ - Sergio's Arcade</title>
+<link rel="stylesheet" href="arcade.css">
+<style>
+  #gc { position:relative; }
+  canvas { display:block; }
+  .overlay { background:rgba(15,12,41,.85); border-radius:14px; backdrop-filter:blur(6px); z-index:5; }
+  .keys { margin-top:12px; color:var(--muted); font-size:.9rem; text-align:center; line-height:1.6; }
+  kbd { background:rgba(255,255,255,.1); border:1px solid rgba(255,255,255,.25); border-bottom-width:3px; border-radius:6px; padding:2px 8px; font-weight:700; color:#fff; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hud">__HUD__</div>
+  <div id="gc">
+    <canvas id="cv" width="760" height="440"></canvas>
+    <div class="overlay" id="ovStart">
+      <h2>__NAME__</h2>
+      <p>__PDESC__</p>
+      <button class="btn-neon" id="btnStart">▶ __PBTN__</button>
+    </div>
+    <div class="overlay" id="ovEnd" style="display:none">
+      <h2 id="endTitle">💥 ¡FIN!</h2>
+      <p id="endMsg"></p>
+      <button class="btn-neon" id="btnAgain">🔄 OTRA PARTIDA</button>
+    </div>
+  </div>
+  <div class="keys">__KEYS__</div>
+  <a href="juegos.html" class="back">← Volver al catálogo</a>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getFirestore, collection, query, where, getDocs, addDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBmTBMyE7Y_LgSXH1SrmEv29DLYdxkyUEw",
+  authDomain: "compartir-textos-app.firebaseapp.com",
+  projectId: "compartir-textos-app",
+  storageBucket: "compartir-textos-app.firebasestorage.app",
+  messagingSenderId: "705083380628",
+  appId: "1:705083380628:web:ce267570e09e3ef1b27581"
+};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+let currentUser = null;
+const GAME_ID='__GAMEID__';
+
+let AC=null;
+function beep(f,d=.08,type='square',v=.12){ try{ AC=AC||new (window.AudioContext||window.webkitAudioContext)(); const o=AC.createOscillator(),g=AC.createGain(); o.type=type;o.frequency.value=f;g.gain.setValueAtTime(v,AC.currentTime);g.gain.exponentialRampToValueAtTime(.001,AC.currentTime+d);o.connect(g).connect(AC.destination);o.start();o.stop(AC.currentTime+d);}catch(e){} }
+
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+const W=cv.width, H=cv.height;
+const $=id=>document.getElementById(id);
+const rnd=(a,b)=>a+Math.random()*(b-a);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+
+async function loadBest(){ if(!currentUser)return; try{
+  const snap=await getDocs(query(collection(db,"scores"),where("userId","==",currentUser.uid),where("gameId","==",GAME_ID)));
+  let m=0; snap.forEach(d=>{ if(d.data().score>m) m=d.data().score; });
+  if(m>0)$('best').innerText=m.toLocaleString();
+}catch(e){} }
+
+onAuthStateChanged(auth,u=>{ if(u){currentUser=u;loadBest();} });
+
+__CODE__
+
+// lazos comunes de UI
+$('btnStart').onclick=()=>start();
+$('btnAgain').onclick=()=>start();
+function start(){ $('ovStart').style.display='none'; $('ovEnd').style.display='none'; reset(); running=true; lastTs=performance.now(); requestAnimationFrame(loop); }
+function endRun(t,m){ running=false; $('endTitle').innerText=t; $('endMsg').innerText=m; $('ovEnd').style.display='flex'; beep(140,.3,'sawtooth'); beep(90,.4,'sawtooth'); }
+let running=false,lastTs=0;
+function loop(ts){ if(!running)return; const dt=Math.min(.033,(ts-lastTs)/1000); lastTs=ts; update(dt); draw(); if(running)requestAnimationFrame(loop); }
+if(typeof reset==='function')reset();
+drawScene?.();
+</script>
+</body>
+</html>
