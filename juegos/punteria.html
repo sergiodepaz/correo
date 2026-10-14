@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Puntería - Sergio's Arcade</title>
+<link rel="stylesheet" href="arcade.css">
+<style>
+  #gc { position:relative; }
+  canvas { display:block; }
+  .keys { margin-top:12px; color:var(--muted); font-size:.9rem; text-align:center; line-height:1.6; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hud"><span>🎯 Puntos<b id="pts">0</b></span><span>🔫 Disparos<b id="shots">0</b></span><span>🏆 Récord<b id="best">—</b></span></div>
+  <div id="gc">
+    <canvas id="cv" width="560" height="440"></canvas>
+    <div class="overlay" id="ovStart">
+      <h2>🎯 PUNTERÍA</h2>
+      <p>Tienes 30 segundos y munición infinita. Dispara a las dianas lo más rápido que puedas: cada acierto suma puntos según lo cerca del centro que aciertes. ¡Demuestra tu pulso!</p>
+      <button class="btn-neon" id="btnStart">▶ EMPEZAR</button>
+    </div>
+    <div class="overlay" id="ovEnd" style="display:none">
+      <h2 id="endTitle">⏱️ ¡SE ACABÓ!</h2>
+      <p id="endMsg"></p>
+      <button class="btn-neon" id="btnAgain">🔄 OTRA RONDA</button>
+    </div>
+  </div>
+  <div class="keys">Haz clic/toca sobre las dianas · Las pequeñas valen más</div>
+  <a href="juegos.html" class="back">← Volver al catálogo</a>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getFirestore, collection, query, where, getDocs, addDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBmTBMyE7Y_LgSXH1SrmEv29DLYdxkyUEw",
+  authDomain: "compartir-textos-app.firebaseapp.com",
+  projectId: "compartir-textos-app",
+  storageBucket: "compartir-textos-app.firebasestorage.app",
+  messagingSenderId: "705083380628",
+  appId: "1:705083380628:web:ce267570e09e3ef1b27581"
+};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+let currentUser = null;
+const GAME_ID='punteria';
+
+let AC=null;
+function beep(f,d=.08,type='square',v=.12){ try{ AC=AC||new (window.AudioContext||window.webkitAudioContext)(); const o=AC.createOscillator(),g=AC.createGain(); o.type=type;o.frequency.value=f;g.gain.setValueAtTime(v,AC.currentTime);g.gain.exponentialRampToValueAtTime(.001,AC.currentTime+d);o.connect(g).connect(AC.destination);o.start();o.stop(AC.currentTime+d);}catch(e){} }
+
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+const W=cv.width, H=cv.height;
+const $=id=>document.getElementById(id);
+const rnd=(a,b)=>a+Math.random()*(b-a);
+
+async function loadBest(){ if(!currentUser)return; try{
+  const snap=await getDocs(query(collection(db,"scores"),where("userId","==",currentUser.uid),where("gameId","==",GAME_ID)));
+  let m=0; snap.forEach(d=>{ if(d.data().score>m) m=d.data().score; });
+  if(m>0)$('best').innerText=m.toLocaleString();
+}catch(e){} }
+onAuthStateChanged(auth,u=>{ if(u){currentUser=u;loadBest();} });
+function addScore(n){if(currentUser&&n>0)addDoc(collection(db,"scores"),{userId:currentUser.uid,gameId:GAME_ID,score:n,timestamp:new Date()}).then(loadBest).catch(()=>{});}
+
+// ===== PUNTERÍA =====
+let targets=[], pops=[], score=0, shots=0, hits=0, timeLeft=30, running=false, lastTs=0, spawnT=0;
+
+function spawnTarget(){
+  const r=rnd(20,46);
+  targets.push({ x:rnd(r+8,W-r-8), y:rnd(r+8,H-r-8), r, born:performance.now(), life:rnd(1.6,2.8), age:0 });
+}
+function reset(){ targets=[]; pops=[]; score=0; shots=0; hits=0; timeLeft=30; spawnT=0; upd(); }
+function upd(){ $('pts').innerText=score; $('shots').innerText=shots; }
+
+function update(dt){
+  if(!running)return;
+  timeLeft-=dt;
+  if(timeLeft<=0){ endRun('⏱️ ¡TIEMPO!','Puntuación final: '+score+' · Precisión: '+(shots?Math.round(hits/shots*100):0)+'%'); addScore(score); return; }
+  spawnT-=dt;
+  const maxT=Math.max(2, 5-Math.floor((30-timeLeft)/7));
+  if(spawnT<=0 && targets.length<maxT){ spawnTarget(); spawnT=Math.max(.35,1.1-(30-timeLeft)*.02); }
+  targets.forEach(t=>t.age+=dt);
+  targets=targets.filter(t=>t.age<t.life);
+  pops.forEach(p=>p.t-=dt);
+  pops=pops.filter(p=>p.t>0);
+}
+
+function drawTarget(t,alpha){
+  const rings=[['#fff',1],['#ff5252',.78],['#fff',.56],['#ff5252',.34],['#ffd93d',.14]];
+  rings.forEach(([c,k])=>{ ctx.fillStyle=c; ctx.globalAlpha=alpha; ctx.beginPath(); ctx.arc(t.x,t.y,t.r*k,0,7); ctx.fill(); });
+  ctx.globalAlpha=1;
+}
+function draw(){
+  ctx.fillStyle='#0f0f1a'; ctx.fillRect(0,0,W,H);
+  const g=ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,'#141a2e'); g.addColorStop(1,'#0a0d18'); ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+  // temporizador
+  ctx.font='800 22px Segoe UI'; ctx.textAlign='center';
+  ctx.fillStyle=timeLeft<6?'#ff5252':'rgba(255,255,255,.85)';
+  ctx.fillText('⏱ '+Math.ceil(Math.max(0,timeLeft))+'s',W/2,32);
+  targets.forEach(t=>{ const k=t.age/t.life; drawTarget(t, k>.8?(1-k)*5:Math.min(1,k*6)); });
+  pops.forEach(p=>{ ctx.globalAlpha=Math.min(1,p.t*2); ctx.font='800 '+(18+p.r*.4)+'px Segoe UI'; ctx.fillStyle=p.good?'#00f2fe':'#ff5252'; ctx.textAlign='center'; ctx.fillText(p.txt,p.x,p.y-p.r-6); ctx.globalAlpha=1; });
+}
+
+cv.addEventListener('pointerdown',e=>{
+  if(!running)return;
+  const r=cv.getBoundingClientRect();
+  const x=(e.clientX-r.left)*W/r.width, y=(e.clientY-r.top)*H/r.height;
+  shots++;
+  let hitIdx=-1, bestD=1e9;
+  targets.forEach((t,i)=>{ const d=Math.hypot(x-t.x,y-t.y); if(d<=t.r && d<bestD){bestD=d;hitIdx=i;} });
+  if(hitIdx>=0){
+    const t=targets[hitIdx];
+    const rel=bestD/t.r; // 0 centro, 1 borde
+    const pts=Math.max(1,Math.round((1-rel)*t.r/4)+1);
+    score+=pts; hits++;
+    pops.push({x:t.x,y:t.y,r:t.r,t:.7,good:true,txt:'+'+pts});
+    targets.splice(hitIdx,1);
+    beep(700+ (1-rel)*700,.07,'triangle');
+  } else {
+    pops.push({x,y,r:10,t:.5,good:false,txt:'✕'});
+    beep(160,.1,'sawtooth');
+  }
+  upd();
+});
+
+$('btnStart').onclick=()=>start();
+$('btnAgain').onclick=()=>start();
+function start(){ $('ovStart').style.display='none'; $('ovEnd').style.display='none'; reset(); running=true; lastTs=performance.now(); requestAnimationFrame(loop); }
+function endRun(t,m){ running=false; $('endTitle').innerText=t; $('endMsg').innerText=m; $('ovEnd').style.display='flex'; beep(140,.3,'sawtooth'); beep(90,.4,'sawtooth'); }
+function loop(ts){ if(!running)return; const dt=Math.min(.033,(ts-lastTs)/1000); lastTs=ts; update(dt); draw(); if(running)requestAnimationFrame(loop); }
+reset(); draw();
+</script>
+</body>
+</html>
