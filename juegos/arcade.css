@@ -1,0 +1,44 @@
+/* ===== Sergio's Arcade — estilo común de juegos ===== */
+:root {
+  --primary:#667eea; --secondary:#764ba2; --accent:#00f2fe;
+  --dark:#0f0c29; --text:#e8e8ff; --muted:#b0b0d0;
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+body {
+  background:linear-gradient(135deg,var(--dark) 0%,#302b63 50%,#24243e 100%);
+  color:var(--text); font-family:'Segoe UI',system-ui,sans-serif;
+  min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px;
+}
+.wrap { display:flex; flex-direction:column; align-items:center; width:100%; max-width:640px; }
+.hud {
+  display:flex; gap:26px; justify-content:space-between; width:100%; max-width:520px;
+  margin-bottom:16px; padding:12px 20px; border-radius:14px;
+  background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1);
+  backdrop-filter:blur(8px); font-size:.95rem; letter-spacing:1px; color:var(--muted);
+}
+.hud b { color:var(--accent); font-size:1.15rem; margin-left:6px; }
+canvas {
+  background:#0f0f1a; border:2px solid var(--primary); border-radius:14px;
+  box-shadow:0 0 30px rgba(102,126,234,.35), inset 0 0 40px rgba(0,0,0,.5);
+  max-width:100%; height:auto; touch-action:none;
+}
+.overlay {
+  position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:14px; text-align:center; padding:20px;
+}
+.wrap { position:relative; }
+.overlay h2 {
+  font-size:2rem; font-weight:800; letter-spacing:2px;
+  background:linear-gradient(90deg,var(--primary),var(--accent));
+  -webkit-background-clip:text; background-clip:text; color:transparent;
+}
+.overlay p { color:var(--muted); max-width:340px; line-height:1.5; }
+.btn-neon {
+  background:linear-gradient(90deg,var(--primary),var(--secondary)); color:#fff; border:none;
+  padding:14px 30px; border-radius:12px; font-size:1.05rem; font-weight:700; cursor:pointer;
+  letter-spacing:1px; box-shadow:0 4px 18px rgba(102,126,234,.45); transition:all .25s ease;
+}
+.btn-neon:hover { filter:brightness(1.25); transform:translateY(-3px); box-shadow:0 8px 26px rgba(0,242,254,.4); }
+.btn-neon:active { transform:translateY(0); }
+.back { margin-top:22px; color:var(--muted); text-decoration:none; font-size:.95rem; transition:color .2s; }
+.back:hover { color:var(--accent); }

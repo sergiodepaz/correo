@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Atrapa la Rata - Sergio's Arcade</title>
+    <style>
+        body { background: #1a1a2e; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; font-family: 'Segoe UI', sans-serif; }
+        canvas { background: #0f0f1a; border: 2px solid #667eea; border-radius: 8px; box-shadow: 0 0 20px rgba(102,126,234,0.3); cursor: crosshair; }
+        .ui { text-align: center; margin-bottom: 20px; }
+        .score { font-size: 2rem; font-weight: bold; color: #667eea; }
+        .timer { font-size: 1.2rem; color: #ff5252; }
+        .btn { background: #667eea; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin-top: 10px; font-size: 1rem; }
+        a { color: #aaa; text-decoration: none; margin-top: 20px; display: inline-block; }
+    </style>
+</head>
+<body>
+    <div class="ui">
+        <div class="score">Ratas: <span id="score">0</span></div>
+        <div class="timer">Tiempo: <span id="timer">30</span>s</div>
+        <button class="btn" onclick="startGame()">▶ Iniciar / Reiniciar</button>
+    </div>
+    <canvas id="game" width="400" height="400"></canvas>
+    <a href="juegos.html">← Volver al Menú</a>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { getFirestore, addDoc, collection } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        const firebaseConfig = { apiKey: "AIzaSyBmTBMyE7Y_LgSXH1SrmEv29DLYdxkyUEw", authDomain: "compartir-textos-app.firebaseapp.com", projectId: "compartir-textos-app", storageBucket: "compartir-textos-app.firebasestorage.app", messagingSenderId: "705083380628", appId: "1:705083380628:web:ce267570e09e3ef1b27581" };
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        let currentUser = null;
+        onAuthStateChanged(auth, (user) => { if(user) currentUser = user; else window.location.href = '../index.html'; });
+
+        const canvas = document.getElementById('game');
+        const ctx = canvas.getContext('2d');
+        const DURATION = 30; // segundos
+
+        let score = 0;
+        let timeLeft = DURATION;
+        let isPlaying = false;
+        let gameInterval, timerInterval;
+        let ratas = [];
+
+        class Rata {
+            constructor() {
+                this.size = 34 + Math.random() * 20;
+                this.x = Math.random() * (canvas.width - this.size);
+                this.y = Math.random() * (canvas.height - this.size);
+                this.vx = (Math.random() - 0.5) * 3;
+                this.vy = (Math.random() - 0.5) * 3;
+                this.life = 1; // se desvanece si no la atrapan
+            }
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                if (this.x < 0 || this.x > canvas.width - this.size) this.vx *= -1;
+                if (this.y < 0 || this.y > canvas.height - this.size) this.vy *= -1;
+            }
+            draw() {
+                ctx.font = `${this.size}px serif`;
+                ctx.fillText('🐀', this.x, this.y + this.size);
+            }
+            contains(px, py) {
+                return px >= this.x && px <= this.x + this.size && py >= this.y && py <= this.y + this.size;
+            }
+        }
+
+        window.startGame = function() {
+            score = 0;
+            timeLeft = DURATION;
+            ratas = [new Rata(), new Rata(), new Rata()];
+            document.getElementById('score').innerText = score;
+            document.getElementById('timer').innerText = timeLeft;
+            if (gameInterval) clearInterval(gameInterval);
+            if (timerInterval) clearInterval(timerInterval);
+            isPlaying = true;
+            gameInterval = setInterval(update, 1000 / 30);
+            timerInterval = setInterval(() => {
+                timeLeft--;
+                document.getElementById('timer').innerText = timeLeft;
+                if (timeLeft <= 0) endGame();
+            }, 1000);
+        }
+
+        function update() {
+            if (!isPlaying) return;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            // mover y dibujar ratas
+            for (let i = ratas.length - 1; i >= 0; i--) {
+                const r = ratas[i];
+                r.update();
+                r.draw();
+            }
+            // de vez en cuando aparece una rata extra
+            if (Math.random() < 0.01 && ratas.length < 6) ratas.push(new Rata());
+        }
+
+        canvas.addEventListener('click', (e) => {
+            if (!isPlaying) return;
+            const rect = canvas.getBoundingClientRect();
+            const px = e.clientX - rect.left;
+            const py = e.clientY - rect.top;
+            for (let i = ratas.length - 1; i >= 0; i--) {
+                if (ratas[i].contains(px, py)) {
+                    ratas.splice(i, 1);
+                    score++;
+                    document.getElementById('score').innerText = score;
+                    ratas.push(new Rata());
+                    break;
+                }
+            }
+        });
+
+        function endGame() {
+            isPlaying = false;
+            clearInterval(gameInterval);
+            clearInterval(timerInterval);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#667eea';
+            ctx.font = 'bold 28px Segoe UI';
+            ctx.textAlign = 'center';
+            ctx.fillText('¡Fin del juego!', canvas.width / 2, canvas.height / 2 - 20);
+            ctx.fillText(`Atrapaste ${score} ratas 🐀`, canvas.width / 2, canvas.height / 2 + 20);
+            if (currentUser && score > 0) {
+                addDoc(collection(db, "scores"), {
+                    userId: currentUser.uid,
+                    gameId: 'rata',
+                    score: score,
+                    timestamp: Date.now()
+                }).catch(e => console.log("Error guardando récord", e));
+            }
+        }
+
+        // pantalla inicial
+        ctx.fillStyle = '#aaa';
+        ctx.font = '20px Segoe UI';
+        ctx.textAlign = 'center';
+        ctx.fillText('Pulsa INICIAR y haz clic a las ratas 🐀', canvas.width / 2, canvas.height / 2);
+    </script>
+</body>
+</html>

@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reflejo de Colores - Sergio's Arcade</title>
+<link rel="stylesheet" href="arcade.css">
+<style>
+  #word { font-size:clamp(3rem,12vw,6rem); font-weight:900; text-transform:uppercase; letter-spacing:4px; margin:20px 0 26px; text-shadow:0 0 24px rgba(255,255,255,.15); }
+  .choices { display:grid; grid-template-columns:repeat(2,minmax(140px,200px)); gap:14px; }
+  .choice { padding:18px; border-radius:14px; border:2px solid transparent; font-size:1.15rem; font-weight:800; cursor:pointer;
+            background:rgba(255,255,255,.07); color:#fff; transition:transform .1s, filter .1s; text-transform:uppercase; }
+  .choice:hover { transform:translateY(-3px); filter:brightness(1.25); }
+  .choice.good { background:#2e7d32; } .choice.bad { background:#c62828; }
+  .timerbar { width:min(92vw,420px); height:8px; border-radius:4px; background:rgba(255,255,255,.1); overflow:hidden; margin-bottom:18px; }
+  .timerbar > div { height:100%; width:100%; background:linear-gradient(90deg,#00f2fe,#ff5252); transition:width .1s linear; }
+  .combo { color:#ffee58; font-weight:800; }
+</style>
+</head>
+<body>
+<div class="wrap">
+    <div class="hud"><span>PUNTOS <b id="score">0</b></span><span>VIDAS <b id="lives">❤️❤️❤️</b></span><span><b class="combo" id="combo"></b></span></div>
+    <div class="timerbar"><div id="tfill"></div></div>
+    <div id="word">¿?</div>
+    <div style="color:#b0b0d0;margin-bottom:14px">Pulsa el botón que coincide con el <b>COLOR de la palabra</b> (ignora lo que dice)</div>
+    <div class="choices" id="choices"></div>
+    <button class="btn-neon" id="startBtn" style="margin-top:22px">▶ EMPEZAR</button>
+    <a class="back" href="juegos.html">← Volver al Menú</a>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getFirestore, addDoc, collection } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+const firebaseConfig = { apiKey: "AIzaSyBmTBMyE7Y_LgSXH1SrmEv29DLYdxkyUEw", authDomain: "compartir-textos-app.firebaseapp.com", projectId: "compartir-textos-app", storageBucket: "compartir-textos-app.firebasestorage.app", messagingSenderId: "705083380628", appId: "1:705083380628:web:ce267570e09e3ef1b27581" };
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+let currentUser = null;
+onAuthStateChanged(auth, (u) => { if (u) currentUser = u; else window.location.href = '../index.html'; });
+
+const COLORS=[{name:'ROJO',hex:'#ff5252'},{name:'AZUL',hex:'#42a5f5'},{name:'VERDE',hex:'#66bb6a'},{name:'AMARILLO',hex:'#ffee58'},{name:'MORADO',hex:'#ab47bc'},{name:'NARANJA',hex:'#ff9800'}];
+let score,lives,combo,roundTime,timeLeft,playing=false,timerInt,deadline;
+
+function pick(a){return a[Math.floor(Math.random()*a.length)]}
+function newRound(){
+  const word=pick(COLORS), ink=pick(COLORS.filter(c=>c.name!==word.name));
+  const wEl=document.getElementById('word');
+  wEl.innerText=word.name; wEl.style.color=ink.hex;
+  // opciones: la tinta + 3 aleatorias sin repetir
+  const opts=new Set([ink]);
+  while(opts.size<4)opts.add(pick(COLORS));
+  const shuffled=[...opts].sort(()=>Math.random()-.5);
+  const box=document.getElementById('choices'); box.innerHTML='';
+  shuffled.forEach(c=>{
+    const b=document.createElement('button'); b.className='choice'; b.innerText=c.name; b.dataset.name=c.name;
+    b.addEventListener('click',()=>answer(b,c.name===ink.name));
+    box.appendChild(b);
+  });
+  roundTime=Math.max(1100, 3200-score*40-combo*60);
+  deadline=performance.now()+roundTime;
+}
+function answer(btn,ok){
+  if(!playing)return;
+  if(ok){
+    btn.classList.add('good'); combo++;
+    const bonus=Math.max(0,Math.round((deadline-performance.now())/10));
+    score+=10+combo*2+bonus;
+    if(score>0&&score%100<20&&currentUser){/* checkpoint guardado al final */}
+  }else{
+    btn.classList.add('bad'); lives--; combo=0;
+    [...document.querySelectorAll('.choice')].forEach(b=>{if(b.dataset.name===document.getElementById('word').style.color)0});
+  }
+  upd();
+  if(lives<=0)return end();
+  setTimeout(newRound,180);
+}
+function upd(){
+  document.getElementById('score').innerText=score;
+  document.getElementById('lives').innerText='❤️'.repeat(Math.max(0,lives))||'💀';
+  document.getElementById('combo').innerText=combo>1?`COMBO x${combo}`:'';
+}
+function tick(){
+  if(!playing)return;
+  const left=deadline-performance.now();
+  document.getElementById('tfill').style.width=Math.max(0,left/roundTime*100)+'%';
+  if(left<=0){ lives--; combo=0; upd();
+    if(lives<=0)return end();
+    [...document.querySelectorAll('.choice')].forEach(b=>b.classList.add('bad'));
+    setTimeout(newRound,300);
+  }
+  requestAnimationFrame(tick);
+}
+function start(){
+  score=0;lives=3;combo=0;playing=true;
+  document.getElementById('startBtn').style.display='none';
+  upd(); newRound(); requestAnimationFrame(tick);
+}
+function end(){
+  playing=false;
+  if(currentUser&&score>0)addDoc(collection(db,"scores"),{userId:currentUser.uid,gameId:'reflejo',score,timestamp:Date.now()}).catch(()=>{});
+  document.getElementById('choices').innerHTML=`<div style="grid-column:1/-1;text-align:center;color:#b0b0d0">💀 Fin. Puntos: <b style="color:#00f2fe">${score}</b></div>`;
+  const b=document.getElementById('startBtn'); b.style.display='inline-block'; b.innerText='🔄 OTRA VEZ';
+}
+document.getElementById('startBtn').addEventListener('click',start);
+</script>
+</body>
+</html>

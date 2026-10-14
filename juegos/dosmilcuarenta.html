@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2048 Neón - Sergio's Arcade</title>
+<link rel="stylesheet" href="arcade.css">
+<style>
+  #board { display:grid; grid-template-columns:repeat(4,86px); gap:10px; background:rgba(255,255,255,.05);
+           padding:12px; border-radius:16px; margin:24px auto; touch-action:none; }
+  .tile { width:86px; height:86px; border-radius:12px; display:flex; align-items:center; justify-content:center;
+          font-size:1.9rem; font-weight:800; background:rgba(255,255,255,.05); color:#fff; transition:all .12s ease; }
+  .t2{background:#3a3f77}.t4{background:#4a4f97}
+  .t8{background:#ff7043}.t16{background:#ff5252}
+  .t32{background:#ff9800;color:#000}.t64{background:#ffc107;color:#000}
+  .t128{background:#ffee58;color:#000;box-shadow:0 0 14px #ffee5866}
+  .t256{background:#66bb6a;box-shadow:0 0 14px #66bb6a66}.t512{background:#42a5f5;box-shadow:0 0 14px #42a5f566}
+  .t1024{background:#ab47bc;box-shadow:0 0 18px #ab47bc88;font-size:1.4rem}
+  .t2048{background:#00f2fe;color:#000;box-shadow:0 0 26px #00f2feaa;font-size:1.4rem}
+  .pop { transform:scale(1.12); }
+  .new { animation:appear .18s ease; }
+  @keyframes appear { from { transform:scale(.2); opacity:.3 } to { transform:scale(1); opacity:1 } }
+</style>
+</head>
+<body>
+<div class="wrap">
+    <div class="hud"><span>PUNTOS <b id="score">0</b></span><span>MÉXIMO <b id="max">0</b></span></div>
+    <div id="board"></div>
+    <div class="opts" style="display:flex;gap:10px;justify-content:center;">
+      <button class="btn-neon" id="newBtn">🔄 NUEVO JUEGO</button>
+    </div>
+    <p style="color:#b0d0;text-align:center;margin-top:14px">Flechas / WASD o desliza el dedo. ¡Llega al 2048!</p>
+    <a class="back" href="juegos.html">← Volver al Menú</a>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getFirestore, addDoc, collection } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+const firebaseConfig = { apiKey: "AIzaSyBmTBMyE7Y_LgSXH1SrmEv29DLYdxkyUEw", authDomain: "compartir-textos-app.firebaseapp.com", projectId: "compartir-textos-app", storageBucket: "compartir-textos-app.firebasestorage.app", messagingSenderId: "705083380628", appId: "1:705083380628:web:ce267570e09e3ef1b27581" };
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+let currentUser = null;
+onAuthStateChanged(auth, (u) => { if (u) currentUser = u; else window.location.href = '../index.html'; });
+
+const SIZE=4; let g,score,overFlag=false,maxTile=0;
+const board=document.getElementById('board');
+
+function reset(){
+  g=Array.from({length:SIZE},()=>Array(SIZE).fill(0));
+  score=0; overFlag=false; maxTile=0;
+  add(); add(); render();
+}
+function add(){
+  const empty=[]; g.forEach((row,r)=>row.forEach((v,c)=>{if(!v)empty.push([r,c])}));
+  if(!empty.length)return;
+  const [r,c]=empty[Math.floor(Math.random()*empty.length)];
+  g[r][c]=Math.random()<0.9?2:4;
+}
+function render(newCells=[],merged=[]){
+  board.innerHTML='';
+  for(let r=0;r<SIZE;r++)for(let c=0;c<SIZE;c++){
+    const d=document.createElement('div');
+    const v=g[r][c];
+    d.className='tile'+(v?(' t'+Math.min(v,2048)):'')+(merged.some(m=>m[0]===r&&m[1]===c)?' pop':'')+(newCells.some(m=>m[0]===r&&m[1]===c)?' new':'');
+    d.textContent=v||'';
+    board.appendChild(d);
+  }
+  document.getElementById('score').innerText=score;
+  document.getElementById('max').innerText=maxTile;
+}
+function slide(row){
+  let arr=row.filter(v=>v), merged=[], gained=0;
+  for(let i=0;i<arr.length-1;i++){
+    if(arr[i]===arr[i+1]){ arr[i]*=2; gained+=arr[i]; arr.splice(i+1,1); merged.push(i); }
+  }
+  while(arr.length<SIZE)arr.push(0);
+  return {arr,gained,moved:row.join()!==arr.join(),anyMerge:merged.length>0};
+}
+function rotate(grid){ // rotación horaria
+  const n=grid.length, out=Array.from({length:n},()=>Array(n).fill(0));
+  for(let r=0;r<n;r++)for(let c=0;c<n;c++)out[c][n-1-r]=grid[r][c];
+  return out;
+}
+function move(dir){ // 0 izq, 1 arriba, 2 der, 3 abajo
+  if(overFlag)return;
+  let rotations={left:0,up:1,right:2,down:3}[dir];
+  let gg=g; for(let i=0;i<rotations;i++)gg=rotate(gg);
+  let moved=false, gainedTotal=0, anyMerge=false;
+  gg=gg.map(row=>{ const res=slide(row); if(res.moved)moved=true; gainedTotal+=res.gained; anyMerge=anyMerge||res.anyMerge; return res.arr; });
+  for(let i=0;i<(4-rotations)%4;i++)gg=rotate(gg);
+  if(!moved)return;
+  g=gg; score+=gainedTotal;
+  g.forEach(row=>row.forEach(v=>{if(v>maxTile)maxTile=v;}));
+  add(); render([],anyMerge?findMergedTiles():[]);
+  if(maxTile>=2048&&!wonNotified){wonNotified=true;alert('🎉 ¡2048! Eres una leyenda. Puedes seguir jugando.');}
+  if(!canMove()){
+    overFlag=true;
+    if(currentUser&&score>0)addDoc(collection(db,"scores"),{userId:currentUser.uid,gameId:'2048',score,timestamp:Date.now()}).catch(()=>{});
+    setTimeout(()=>{ if(confirm(`💀 Fin del juego. Puntuación: ${score}. ¿Nueva partida?`))reset(); },200);
+  }
+}
+function findMergedTiles(){ return []; }
+function canMove(){
+  if(g.some(row=>row.includes(0)))return true;
+  for(const dir of ['left','up']){ const before=JSON.stringify(g); moveSilent(dir); const after=JSON.stringify(g); g=JSON.parse(before); if(after!==before)return true; }
+  return false;
+}
+function moveSilent(dir){
+  let rotations={left:0,up:1}[dir]; let gg=g;
+  for(let i=0;i<rotations;i++)gg=rotate(gg);
+  gg=gg.map(row=>slide(row).arr);
+  for(let i=0;i<(4-rotations)%4;i++)gg=rotate(gg);
+  g=gg;
+}
+let wonNotified=false;
+document.addEventListener('keydown',e=>{
+  const map={ArrowLeft:'left',KeyA:'left',ArrowUp:'up',KeyW:'up',ArrowRight:'right',KeyD:'right',ArrowDown:'down',KeyS:'down'};
+  const dir=map[e.key]||map[e.code];
+  if(dir){e.preventDefault();move(dir);}
+});
+let sx,sy;
+board.addEventListener('touchstart',e=>{sx=e.touches[0].clientX;sy=e.touches[0].clientY;},{passive:true});
+board.addEventListener('touchend',e=>{
+  const dx=e.changedTouches[0].clientX-sx, dy=e.changedTouches[0].clientY-sy;
+  if(Math.max(Math.abs(dx),Math.abs(dy))<24)return;
+  if(Math.abs(dx)>Math.abs(dy))move(dx>0?'right':'left'); else move(dy>0?'down':'up');
+},{passive:true});
+document.getElementById('newBtn').addEventListener('click',reset);
+reset();
+</script>
+</body>
+</html>
