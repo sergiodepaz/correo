@@ -36,26 +36,30 @@
 
     <a href="juegos.html">← Volver al Menú</a>
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-        import { getFirestore, addDoc, collection } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    <script src="arcade-lib.js"></script>
+    <script>
 
-        const firebaseConfig = { apiKey: "AIzaSyBmTBMyE7Y_LgSXH1SrmEv29DLYdxkyUEw", authDomain: "compartir-textos-app.firebaseapp.com", projectId: "compartir-textos-app", storageBucket: "compartir-textos-app.firebasestorage.app", messagingSenderId: "705083380628", appId: "1:705083380628:web:ce267570e09e3ef1b27581" };
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        let currentUser = null;
-        onAuthStateChanged(auth, (user) => { if(user) currentUser = user; else window.location.href = '../index.html'; });
-
-        let coins = 0;
+        let coins = +(localStorage.getItem('clicker_coins') || 0);   // tu partida se conserva al volver
         let cps = 0;
         let costs = [15, 100, 500];
         let cpsValues = [1, 5, 20];
 
-        window.clickCoin = function() {
+        window.clickCoin = function(ev) {
             coins++;
+            floatText(ev, '+1');
+            Arcade.beep(500 + Math.random()*150, .03, 'square', .04);
             updateUI();
+        }
+
+        // pequeño "+1" flotante donde haces clic
+        function floatText(ev, txt) {
+            const el = document.createElement('div');
+            el.textContent = txt;
+            el.style.cssText = 'position:fixed;color:#ffd700;font-weight:800;font-size:1.3rem;pointer-events:none;z-index:999;' +
+              'text-shadow:0 0 8px rgba(255,215,0,.6);transition:all .7s ease-out;left:' + (ev.clientX||innerWidth/2) + 'px;top:' + (ev.clientY||0) + 'px;opacity:1;';
+            document.body.appendChild(el);
+            requestAnimationFrame(() => { el.style.transform = 'translateY(-60px)'; el.style.opacity = '0'; });
+            setTimeout(() => el.remove(), 750);
         }
 
         window.buyUpgrade = function(idx) {
@@ -63,9 +67,26 @@
                 coins -= costs[idx];
                 cps += cpsValues[idx];
                 costs[idx] = Math.floor(costs[idx] * 1.5);
+                Arcade.beep(700 + idx*200, .08, 'triangle', .1);
+                save();
                 updateUI();
+            } else {
+                Arcade.beep(150, .12, 'sawtooth', .08);
+                Arcade.toast('Te faltan ' + Math.ceil(costs[idx] - coins) + ' monedas 💰');
             }
         }
+
+        function save() {
+            localStorage.setItem('clicker_coins', String(Math.floor(coins)));
+            localStorage.setItem('clicker_cps', String(cps));
+            localStorage.setItem('clicker_costs', JSON.stringify(costs));
+        }
+
+        // restaurar mejoras guardadas
+        try {
+            const sc = JSON.parse(localStorage.getItem('clicker_costs') || 'null');
+            if (sc && sc.length === 3) { costs = sc; cps = +(localStorage.getItem('clicker_cps') || 0); }
+        } catch(e) {}
 
         function updateUI() {
             document.getElementById('coins').innerText = Math.floor(coins);
@@ -83,12 +104,13 @@
             }
         }, 100);
 
-        // Guardar récord cada 30 segundos
-        setInterval(async () => {
-            if(currentUser && coins > 0) {
-                await addDoc(collection(db, "scores"), { userId: currentUser.uid, gameId: 'clicker', score: Math.floor(coins), timestamp: new Date() });
-            }
-        }, 30000);
+        // Guardar progreso y récord (la librería evita duplicados en la nube)
+        setInterval(() => {
+            save();
+            if (coins > 0) Arcade.addScore(Math.floor(coins));
+        }, 15000);
+        window.addEventListener('beforeunload', save);
+        updateUI();
     </script>
 </body>
 </html>

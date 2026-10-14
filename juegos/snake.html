@@ -21,18 +21,8 @@
     <canvas id="game" width="400" height="400"></canvas>
     <a href="juegos.html">← Volver al Menú</a>
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-        import { getFirestore, addDoc, collection } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-
-        const firebaseConfig = { apiKey: "AIzaSyBmTBMyE7Y_LgSXH1SrmEv29DLYdxkyUEw", authDomain: "compartir-textos-app.firebaseapp.com", projectId: "compartir-textos-app", storageBucket: "compartir-textos-app.firebasestorage.app", messagingSenderId: "705083380628", appId: "1:705083380628:web:ce267570e09e3ef1b27581" };
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        
-        let currentUser = null;
-        onAuthStateChanged(auth, (user) => { if(user) currentUser = user; else window.location.href = '../index.html'; });
+    <script src="arcade-lib.js"></script>
+        <script>
 
         const canvas = document.getElementById('game');
         const ctx = canvas.getContext('2d');
@@ -43,20 +33,32 @@
         let score = 0;
         let gameInterval;
         let isPlaying = false;
+        let dirQueue = [];                 // cola de giros: responde rápido y evita el "auto-choque"
+        let speedMs = 110;                 // velocidad inicial (baja al comer)
+        let lastKey = '';                  // anti-rebote: ignora teclas repetidas
+        let paused = false;
 
         window.startGame = function() {
             snake = [{x: 10, y: 10}];
             dx = 1; dy = 0;
-            score = 0;
+            dirQueue = [];
+            score = 0; speedMs = 110; paused = false;
             document.getElementById('score').innerText = score;
             placeFood();
             if(gameInterval) clearInterval(gameInterval);
             isPlaying = true;
-            gameInterval = setInterval(update, 100);
+            gameInterval = setInterval(tick, speedMs);
+            draw();
+        }
+
+        function tick() {
+            if(paused || !isPlaying) return;
+            update();
         }
 
         function update() {
             if(!isPlaying) return;
+            if(dirQueue.length) { const d = dirQueue.shift(); dx = d.x; dy = d.y; }
             const head = {x: snake[0].x + dx, y: snake[0].y + dy};
             
             // Colisión paredes o consigo mismo
@@ -70,6 +72,12 @@
                 score += 10;
                 document.getElementById('score').innerText = score;
                 placeFood();
+                // cada 5 manzanas la serpiente acelera un poco (¡más emoción!)
+                if(score % 50 === 0 && speedMs > 60) {
+                    speedMs -= 8;
+                    clearInterval(gameInterval);
+                    gameInterval = setInterval(tick, speedMs);
+                }
             } else {
                 snake.pop();
             }
@@ -88,23 +96,65 @@
         }
 
         function placeFood() {
-            food = { x: Math.floor(Math.random() * 20), y: Math.floor(Math.random() * 20) };
+            // la comida nunca aparece encima de la serpiente
+            do {
+                food = { x: Math.floor(Math.random() * 20), y: Math.floor(Math.random() * 20) };
+            } while (snake.some(s => s.x === food.x && s.y === food.y));
         }
 
-        async function gameOver() {
+        function gameOver() {
             isPlaying = false;
             clearInterval(gameInterval);
-            alert(`¡Juego terminado! Puntuación: ${score}`);
-            if(currentUser && score > 0) {
-                await addDoc(collection(db, "scores"), { userId: currentUser.uid, gameId: 'snake', score, timestamp: new Date() });
-            }
+            Arcade.beep(160, .3, 'sawtooth', .15);
+            ctx.fillStyle = 'rgba(15,12,41,.78)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#ff5252';
+            ctx.font = 'bold 30px Segoe UI';
+            ctx.fillText('💀 ¡FIN!', canvas.width/2, canvas.height/2 - 40);
+            ctx.fillStyle = '#fff';
+            ctx.font = '20px Segoe UI';
+            ctx.fillText('Puntuación: ' + score, canvas.width/2, canvas.height/2);
+            ctx.fillStyle = '#00f2fe';
+            ctx.font = '15px Segoe UI';
+            ctx.fillText('Pulsa ESPACIO o toca para reintentar', canvas.width/2, canvas.height/2 + 34);
+            if (score > 0) Arcade.addScore(score);   // récord local inmediato + sincroniza con la nube
         }
 
+        function setDir(kx, ky) {
+            const last = dirQueue.length ? dirQueue[dirQueue.length - 1] : {x: dx, y: dy};
+            if ((kx === -last.x && ky === -last.y) || (kx === last.x && ky === last.y)) return; // no dar media vuelta
+            if (dirQueue.length < 3) dirQueue.push({x: kx, y: ky});
+        }
+
+        // --- soporte táctil: deslizar sobre el canvas ---
+        let touchStart = null;
+        canvas.addEventListener('touchstart', e => { touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY }; }, {passive:true});
+        canvas.addEventListener('touchend', e => {
+            if (!touchStart) return;
+            const t = e.changedTouches[0];
+            const vx = t.clientX - touchStart.x, vy = t.clientY - touchStart.y;
+            touchStart = null;
+            if (!isPlaying) { startGame(); return; }
+            if (Math.abs(vx) < 18 && Math.abs(vy) < 18) return;
+            if (Math.abs(vx) > Math.abs(vy)) setDir(vx > 0 ? 1 : -1, 0);
+            else setDir(0, vy > 0 ? 1 : -1);
+        }, {passive:true});
+        canvas.addEventListener('click', () => { if (!isPlaying) startGame(); });
+
         document.addEventListener('keydown', e => {
-            if(e.key === 'ArrowUp' && dy !== 1) { dx=0; dy=-1; }
-            if(e.key === 'ArrowDown' && dy !== -1) { dx=0; dy=1; }
-            if(e.key === 'ArrowLeft' && dx !== 1) { dx=-1; dy=0; }
-            if(e.key === 'ArrowRight' && dx !== -1) { dx=1; dy=0; }
+            if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
+            if (e.repeat) return;
+            if (e.key === ' ') {
+                if (!isPlaying) { startGame(); return; }
+                paused = !paused;
+                Arcade.toast(paused ? '⏸ PAUSA — pulsa ESPACIO para seguir' : '▶ ¡Sigue así!');
+                return;
+            }
+            if(e.key === 'ArrowUp')    setDir(0,-1);
+            if(e.key === 'ArrowDown')   setDir(0,1);
+            if(e.key === 'ArrowLeft')   setDir(-1,0);
+            if(e.key === 'ArrowRight')  setDir(1,0);
         });
     </script>
 </body>
