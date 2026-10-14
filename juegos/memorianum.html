@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Memoria Numérica - Sergio's Arcade</title>
+<link rel="stylesheet" href="arcade.css">
+<style>
+  #gc { position:relative; width:100%; max-width:520px; }
+  #panel { width:100%; min-height:170px; display:flex; align-items:center; justify-content:center;
+    background:#0f0f1a; border:2px solid var(--primary); border-radius:14px;
+    box-shadow:0 0 30px rgba(102,126,234,.35), inset 0 0 40px rgba(0,0,0,.5);
+    font-size:3rem; font-weight:800; letter-spacing:6px; color:var(--accent); padding:20px; word-break:break-all; text-align:center;}
+  .keys { margin-top:12px; color:var(--muted); font-size:.9rem; text-align:center; line-height:1.6; }
+  input[type=text]{ background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.25); border-radius:10px;
+    color:#fff; font-size:1.3rem; padding:12px 16px; text-align:center; letter-spacing:4px; width:100%; outline:none;}
+  input[type=text]:focus{ border-color:var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hud"><span>🧠 Nivel<b id="lvl">0</b></span><span>❤️ Vidas<b id="lives">3</b></span><span>🏆 Récord<b id="best">—</b></span></div>
+  <div id="gc">
+    <div id="panel">🧠</div>
+    <div class="overlay" id="ovStart">
+      <h2>🔢 MEMORIA NUMÉRICA</h2>
+      <p>Aparecerá una secuencia de números durante unos segundos. Cuando desaparezca, escríbela exacta. Cada nivel añade un dígito más. ¿Hasta dónde llega tu memoria?</p>
+      <button class="btn-neon" id="btnStart">▶ EMPEZAR</button>
+    </div>
+    <div class="overlay" id="ovEnd" style="display:none">
+      <h2 id="endTitle">💥 ¡FIN!</h2>
+      <p id="endMsg"></p>
+      <button class="btn-neon" id="btnAgain">🔄 OTRA PARTIDA</button>
+    </div>
+  </div>
+  <div id="answerRow" style="width:100%;max-width:520px;margin-top:14px;display:none">
+    <input type="text" id="ans" inputmode="numeric" autocomplete="off" placeholder="Escribe la secuencia...">
+    <button class="btn-neon" id="btnSend" style="width:100%;margin-top:10px">✔ CONFIRMAR</button>
+  </div>
+  <div class="keys">Memoriza la secuencia y escríbela cuando desaparezca</div>
+  <a href="juegos.html" class="back">← Volver al catálogo</a>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getFirestore, collection, query, where, getDocs, addDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBmTBMyE7Y_LgSXH1SrmEv29DLYdxkyUEw",
+  authDomain: "compartir-textos-app.firebaseapp.com",
+  projectId: "compartir-textos-app",
+  storageBucket: "compartir-textos-app.firebasestorage.app",
+  messagingSenderId: "705083380628",
+  appId: "1:705083380628:web:ce267570e09e3ef1b27581"
+};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+let currentUser = null;
+const GAME_ID='memorianum';
+
+let AC=null;
+function beep(f,d=.08,type='square',v=.12){ try{ AC=AC||new (window.AudioContext||window.webkitAudioContext)(); const o=AC.createOscillator(),g=AC.createGain(); o.type=type;o.frequency.value=f;g.gain.setValueAtTime(v,AC.currentTime);g.gain.exponentialRampToValueAtTime(.001,AC.currentTime+d);o.connect(g).connect(AC.destination);o.start();o.stop(AC.currentTime+d);}catch(e){} }
+
+const $=id=>document.getElementById(id);
+async function loadBest(){ if(!currentUser)return; try{
+  const snap=await getDocs(query(collection(db,"scores"),where("userId","==",currentUser.uid),where("gameId","==",GAME_ID)));
+  let m=0; snap.forEach(d=>{ if(d.data().score>m) m=d.data().score; });
+  if(m>0)$('best').innerText=m.toLocaleString();
+}catch(e){} }
+onAuthStateChanged(auth,u=>{ if(u){currentUser=u;loadBest();} });
+function addScore(n){if(currentUser&&n>0)addDoc(collection(db,"scores"),{userId:currentUser.uid,gameId:GAME_ID,score:n,timestamp:new Date()}).then(loadBest).catch(()=>{});}
+
+// ===== MEMORIA NUMÉRICA =====
+let level=1, lives=3, seq='', phase='idle', hideTimer=null;
+
+function upd(){ $('lvl').innerText=level-1; $('lives').innerText=lives; }
+
+function nextRound(){
+  phase='show';
+  seq=''; for(let i=0;i<level;i++) seq+=Math.floor(Math.random()*10);
+  const panel=$('panel');
+  panel.innerText=seq.split('').join(' ');
+  panel.style.color='var(--accent)';
+  $('answerRow').style.display='none';
+  const ms=Math.min(6000, 1400+level*500);
+  clearTimeout(hideTimer);
+  hideTimer=setTimeout(()=>{
+    panel.innerText='❓';
+    panel.style.color='var(--muted)';
+    phase='input';
+    $('answerRow').style.display='block';
+    $('ans').value=''; $('ans').disabled=false; $('ans').focus();
+    beep(500,.08,'triangle');
+  },ms);
+}
+
+function submit(){
+  if(phase!=='input')return;
+  const val=$('ans').value.replace(/\s+/g,'');
+  $('answerRow').style.display='none';
+  if(val===seq){
+    level++;
+    beep(800,.07);beep(1100,.09);
+    $('panel').innerText='✅'; $('panel').style.color='#6dffb0';
+    upd();
+    setTimeout(nextRound,900);
+  } else {
+    lives--;
+    beep(180,.2,'sawtooth');
+    $('panel').innerHTML='❌<br><span style="font-size:1.2rem;color:var(--muted)">era '+seq.split('').join(' ')+'</span>';
+    $('panel').style.color='#ff5252';
+    upd();
+    if(lives<=0){ gameOver(); return; }
+    level=Math.max(1,level-1);
+    setTimeout(nextRound,1600);
+  }
+}
+$('ans').addEventListener('keydown',e=>{ if(e.key==='Enter')submit(); });
+$('btnSend').onclick=submit;
+
+function reset(){ level=1; lives=3; phase='idle'; clearTimeout(hideTimer); $('panel').innerText='🧠'; $('panel').style.color='var(--accent)'; $('answerRow').style.display='none'; upd(); }
+function gameOver(){ phase='over'; addScore(level-1); endRun('🧠 MEMORIA MÁXIMA: '+(level-1)+' dígitos','Llegaste al nivel '+(level-1)+'. ¡Entrena y vuelve a intentarlo!'); }
+
+$('btnStart').onclick=()=>start();
+$('btnAgain').onclick=()=>start();
+function start(){ $('ovStart').style.display='none'; $('ovEnd').style.display='none'; reset(); running=true; upd(); nextRound(); }
+let running=false;
+function endRun(t,m){ running=false; clearTimeout(hideTimer); $('answerRow').style.display='none'; $('endTitle').innerText=t; $('endMsg').innerText=m; $('ovEnd').style.display='flex'; beep(140,.3,'sawtooth'); beep(90,.4,'sawtooth'); }
+reset();
+</script>
+</body>
+</html>
