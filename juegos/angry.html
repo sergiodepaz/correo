@@ -32,38 +32,18 @@
   <a href="juegos.html" class="back">← Volver al catálogo</a>
 </div>
 
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { getFirestore, collection, query, where, getDocs, addDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-
-const firebaseConfig = {
-  apiKey: "AIzaSyBmTBMyE7Y_LgSXH1SrmEv29DLYdxkyUEw",
-  authDomain: "compartir-textos-app.firebaseapp.com",
-  projectId: "compartir-textos-app",
-  storageBucket: "compartir-textos-app.firebasestorage.app",
-  messagingSenderId: "705083380628",
-  appId: "1:705083380628:web:ce267570e09e3ef1b27581"
-};
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-let currentUser = null;
-const GAME_ID='angry';
-
+<script src="arcade-lib.js"></script>
+<script>
 let AC=null;
 function beep(f,d=.08,type='square',v=.12){ try{ AC=AC||new (window.AudioContext||window.webkitAudioContext)(); const o=AC.createOscillator(),g=AC.createGain(); o.type=type;o.frequency.value=f;g.gain.setValueAtTime(v,AC.currentTime);g.gain.exponentialRampToValueAtTime(.001,AC.currentTime+d);o.connect(g).connect(AC.destination);o.start();o.stop(AC.currentTime+d);}catch(e){} }
-
+Arcade.onReady(u=>{ $('best').innerText=Arcade.best()?Arcade.best().toLocaleString():'—'; });
 const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
 const W=640,H=480,FLOOR=H-30,SLING={x:110,y:FLOOR-90};
 const $=id=>document.getElementById(id);
 
+let currentUser=null;
+function loadBest(){$('best').innerText=Arcade.best()?Arcade.best().toLocaleString():'—';}
 let level=1, ammo=3, score=0, balls=[], blocks=[], debris=[], aiming=false, aimPt=null, ballActive=false, running=false, lastTs=0;
-
-async function loadBest(){ if(!currentUser)return; try{
-  const snap=await getDocs(query(collection(db,"scores"),where("userId","==",currentUser.uid),where("gameId","==",GAME_ID)));
-  let b=0; snap.forEach(d=>b=Math.max(b,d.data().score)); $('best').innerText=b||'—';
-}catch(e){} }
 
 function buildLevel(n){
   blocks=[]; 
@@ -84,7 +64,7 @@ function buildLevel(n){
     const tx=baseX+cols*(bw+4)+40;
     for(let rw=0;rw<3;rw++)blocks.push({x:tx, y:FLOOR-(rw+1)*(bh+2), w:bw,h:bh, hp:1, red:rw===1, vx:0,vy:0, settled:true});
   }
-  ammo=Math.min(9,3+(n>5?1:0));
+  ammo=Math.min(10,3+Math.floor(n/2));
   newBall(); updHud();
 }
 
@@ -171,6 +151,7 @@ function afterShot(){
   const redsLeft=blocks.some(k=>k.red&&!k.dead);
   if(!redsLeft){ winLevel(); return; }
   if(ammo<=0){ loseGame(); return; }
+  balls.forEach(b=>{ b.live=false; });
   newBall();
 }
 
@@ -192,8 +173,7 @@ function loseGame(){
   $('ovMsg').style.display='flex';
   $('btnMsg').innerText='🔄 REINTENTAR';
   $('btnMsg').onclick=()=>{ $('ovMsg').style.display='none'; startGame(); };
-  if(currentUser&&score>0)addDoc(collection(db,"scores"),{userId:currentUser.uid, gameId:GAME_ID, score, timestamp:new Date()}).then(loadBest).catch(()=>{});
-  beep(180,.3,'sawtooth',.2);
+  Arcade.addScore(score);
 }
 
 function draw(){
@@ -257,7 +237,7 @@ requestAnimationFrame(loop);
 function startGame(){ level=1; score=0; buildLevel(1); running=true; $('ovStart').style.display='none'; }
 $('btnStart').onclick=startGame;
 
-onAuthStateChanged(auth,async u=>{ if(!u){window.location.href='../index.html';return;} currentUser=u; await loadBest(); });
+
 buildLevel(1);
 </script>
 </body>

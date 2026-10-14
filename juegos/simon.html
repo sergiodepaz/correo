@@ -28,18 +28,8 @@
     <a class="back" href="juegos.html">← Volver al Menú</a>
 </div>
 
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { getFirestore, addDoc, collection } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-
-const firebaseConfig = { apiKey: "AIzaSyBmTBMyE7Y_LgSXH1SrmEv29DLYdxkyUEw", authDomain: "compartir-textos-app.firebaseapp.com", projectId: "compartir-textos-app", storageBucket: "compartir-textos-app.firebasestorage.app", messagingSenderId: "705083380628", appId: "1:705083380628:web:ce267570e09e3ef1b27581" };
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-let currentUser = null;
-onAuthStateChanged(auth, (u) => { if (u) currentUser = u; else window.location.href = '../index.html'; });
-
+<script src="arcade-lib.js"></script>
+<script>
 const pads=[...document.querySelectorAll('.pad')];
 const FREQ=[329.6,392,466.2,523.2]; // sonidos distintos por pad
 let seq=[], idx=0, accepting=false, audioCtx=null;
@@ -80,7 +70,7 @@ function fail(){
   document.getElementById('status').innerText='❌ Fallaste';
   document.getElementById('msg').innerText=`Llegaste al nivel ${seq.length-1}. ¡Inténtalo de nuevo!`;
   const lvl=seq.length-1; seq=[];
-  if(currentUser&&lvl>0)addDoc(collection(db,"scores"),{userId:currentUser.uid,gameId:'simon',score:lvl,timestamp:Date.now()}).catch(()=>{});
+  Arcade.addScore(lvl*100);
   pads.forEach(p=>{p.classList.add('active')}); setTimeout(()=>pads.forEach(p=>p.classList.remove('active')),400);
 }
 document.getElementById('startBtn').addEventListener('click',()=>{

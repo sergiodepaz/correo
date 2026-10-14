@@ -33,22 +33,8 @@
   <a href="juegos.html" class="back">← Volver al catálogo</a>
 </div>
 
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { getFirestore, collection, query, where, getDocs, addDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-
-const firebaseConfig = {
-  apiKey: "AIzaSyBmTBMyE7Y_LgSXH1SrmEv29DLYdxkyUEw",
-  authDomain: "compartir-textos-app.firebaseapp.com",
-  projectId: "compartir-textos-app",
-  storageBucket: "compartir-textos-app.firebasestorage.app",
-  messagingSenderId: "705083380628",
-  appId: "1:705083380628:web:ce267570e09e3ef1b27581"
-};
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
+<script src="arcade-lib.js"></script>
+<script>
 let currentUser = null;
 const GAME_ID='run';
 
@@ -77,10 +63,7 @@ function reset(){
   updHud();
 }
 
-async function loadBest(){ if(!currentUser)return; try{
-  const snap=await getDocs(query(collection(db,"scores"),where("userId","==",currentUser.uid),where("gameId","==",GAME_ID)));
-  let b=0; snap.forEach(d=>b=Math.max(b,d.data().score)); $('best').innerText=b+' m'||'—';
-}catch(e){} }
+function loadBest(){ const b=Arcade.best(); if(b>0)document.getElementById('best').innerText=b.toLocaleString(); }
 
 function updHud(){ $('dist').innerText=dist|0; $('gems').innerText=gems; $('lives').innerText=lives; }
 
@@ -186,16 +169,14 @@ function endGame(){
   const m=dist|0;
   const msg=m>=1500?'🤯 ¡Maratoniano galáctico!' : m>=800?'🔥 ¡Qué fondo físico!' : m>=300?'👍 ¡Buena carrera!' : '🐢 ¿Calentabas hoy?';
   $('endMsg').innerText=`Corriste ${m} m y recogiste ${gems} 💎. ${msg}`;
-  if(currentUser&&m>0){
-    addDoc(collection(db,"scores"),{userId:currentUser.uid, gameId:GAME_ID, score:m, timestamp:new Date()}).then(loadBest).catch(()=>{});
-  }
+  if(m>0){ Arcade.addScore(m); loadBest(); }
 }
 
 function startGame(){ reset(); running=true; $('ovStart').style.display='none'; $('ovEnd').style.display='none'; beep(520,.12,'triangle',.15); }
 $('btnStart').onclick=startGame; $('btnAgain').onclick=startGame;
 
 reset();
-onAuthStateChanged(auth,async u=>{ if(!u){window.location.href='../index.html';return;} currentUser=u; await loadBest(); });
+Arcade.onReady(u=>{ currentUser=u; if(typeof loadBest==='function')loadBest(); });
 </script>
 </body>
 </html>

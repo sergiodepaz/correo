@@ -28,17 +28,10 @@
     <a class="back" href="juegos.html">← Volver al Menú</a>
 </div>
 
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { getFirestore, addDoc, collection } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-
-const firebaseConfig = { apiKey: "AIzaSyBmTBMyE7Y_LgSXH1SrmEv29DLYdxkyUEw", authDomain: "compartir-textos-app.firebaseapp.com", projectId: "compartir-textos-app", storageBucket: "compartir-textos-app.firebasestorage.app", messagingSenderId: "705083380628", appId: "1:705083380628:web:ce267570e09e3ef1b27581" };
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
+<script src="arcade-lib.js"></script>
+<script>
 let currentUser = null;
-onAuthStateChanged(auth, (u) => { if (u) currentUser = u; else window.location.href = '../index.html'; });
+Arcade.onReady(u=>{ currentUser=u; });
 
 const COLORS=[{name:'ROJO',hex:'#ff5252'},{name:'AZUL',hex:'#42a5f5'},{name:'VERDE',hex:'#66bb6a'},{name:'AMARILLO',hex:'#ffee58'},{name:'MORADO',hex:'#ab47bc'},{name:'NARANJA',hex:'#ff9800'}];
 let score,lives,combo,roundTime,timeLeft,playing=false,timerInt,deadline;
@@ -99,8 +92,7 @@ function start(){
 }
 function end(){
   playing=false;
-  if(currentUser&&score>0)addDoc(collection(db,"scores"),{userId:currentUser.uid,gameId:'reflejo',score,timestamp:Date.now()}).catch(()=>{});
-  document.getElementById('choices').innerHTML=`<div style="grid-column:1/-1;text-align:center;color:#b0b0d0">💀 Fin. Puntos: <b style="color:#00f2fe">${score}</b></div>`;
+  Arcade.addScore(score);HTML=`<div style="grid-column:1/-1;text-align:center;color:#b0b0d0">💀 Fin. Puntos: <b style="color:#00f2fe">${score}</b></div>`;
   const b=document.getElementById('startBtn'); b.style.display='inline-block'; b.innerText='🔄 OTRA VEZ';
 }
 document.getElementById('startBtn').addEventListener('click',start);

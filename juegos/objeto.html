@@ -13,7 +13,7 @@
 </head>
 <body>
 <div class="wrap">
-  <div class="hud"><span>🔎 Encuentros<b id="found">0</b></span><span>❌ Fallos<b id="misses">0</b></span><span>⏱️ Tiempo<b id="time">45</b></span><span>🏆 Récord<b id="best">—</b></span></div>
+  <div class="hud"><span>🔎 Encuentros<b id="found">0</b></span><span>⭐ Puntos<b id="pts">0</b></span><span>❌ Fallos<b id="misses">0</b></span><span>⏱️ Tiempo<b id="time">45</b></span><span>🏆 Récord<b id="best">—</b></span></div>
   <div id="gc">
     <canvas id="cv" width="620" height="460"></canvas>
     <div class="overlay" id="ovStart">
@@ -31,45 +31,19 @@
   <a href="juegos.html" class="back">← Volver al catálogo</a>
 </div>
 
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { getFirestore, collection, query, where, getDocs, addDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-
-const firebaseConfig = {
-  apiKey: "AIzaSyBmTBMyE7Y_LgSXH1SrmEv29DLYdxkyUEw",
-  authDomain: "compartir-textos-app.firebaseapp.com",
-  projectId: "compartir-textos-app",
-  storageBucket: "compartir-textos-app.firebasestorage.app",
-  messagingSenderId: "705083380628",
-  appId: "1:705083380628:web:ce267570e09e3ef1b27581"
-};
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-let currentUser = null;
-const GAME_ID='objeto';
-
-let AC=null;
-function beep(f,d=.08,type='square',v=.12){ try{ AC=AC||new (window.AudioContext||window.webkitAudioContext)(); const o=AC.createOscillator(),g=AC.createGain(); o.type=type;o.frequency.value=f;g.gain.setValueAtTime(v,AC.currentTime);g.gain.exponentialRampToValueAtTime(.001,AC.currentTime+d);o.connect(g).connect(AC.destination);o.start();o.stop(AC.currentTime+d);}catch(e){} }
-
+<script src="arcade-lib.js"></script>
+<script>
 const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
 const W=cv.width, H=cv.height;
 const $=id=>document.getElementById(id);
 const rnd=(a,b)=>a+Math.random()*(b-a);
 const pick=a=>a[Math.floor(Math.random()*a.length)];
-
-async function loadBest(){ if(!currentUser)return; try{
-  const snap=await getDocs(query(collection(db,"scores"),where("userId","==",currentUser.uid),where("gameId","==",GAME_ID)));
-  let m=0; snap.forEach(d=>{ if(d.data().score>m) m=d.data().score; });
-  if(m>0)$('best').innerText=m.toLocaleString();
-}catch(e){} }
-onAuthStateChanged(auth,u=>{ if(u){currentUser=u;loadBest();} });
-function addScore(n){if(currentUser&&n>0)addDoc(collection(db,"scores"),{userId:currentUser.uid,gameId:GAME_ID,score:n,timestamp:new Date()}).then(loadBest).catch(()=>{});}
-
+let AC=null;
+function beep(f,d=.08,type='square',v=.12){ try{ AC=AC||new (window.AudioContext||window.webkitAudioContext)(); const o=AC.createOscillator(),g=AC.createGain(); o.type=type;o.frequency.value=f;g.gain.setValueAtTime(v,AC.currentTime);g.gain.exponentialRampToValueAtTime(.001,AC.currentTime+d);o.connect(g).connect(AC.destination);o.start();o.stop(AC.currentTime+d);}catch(e){} }
+Arcade.onReady(u=>{ $('best').innerText=Arcade.best()?Arcade.best().toLocaleString():'—'; });
 // ===== OBJETO ESCONDIDO =====
 const EMOJIS=['🍎','🍌','🍇','🍩','🎈','⭐','🌙','⚽','🏀','🎸','🚗','🚀','🐸','🐱','🐶','🦊','🌸','🍄','👾','🤖','🧲','🎩','🐞','🦋','🍕','🧢','🥁','🪁','🌵','🎯'];
-let items=[], target='', found=0, misses=0, timeLeft=45, roundStart=0, running=false, lastTs=0, flash=null;
+let items=[], target='', found=0, pts=0, misses=0, timeLeft=45, roundStart=0, running=false, lastTs=0, flash=null;
 
 function placeItem(emoji,size,alpha){
   return { e:emoji, x:rnd(size+10,W-size-10), y:rnd(size+50,H-size-10), s:size, a:alpha, rot:rnd(-.4,.4) };
@@ -77,10 +51,11 @@ function placeItem(emoji,size,alpha){
 function newRound(){
   items=[];
   let decoys; do{ decoys=pick(EMOJIS); }while(decoys===target);
+  const size=rnd(24,34);
   const n=Math.min(30, 12+found*2);
   const camouflaged=Math.random()<.35 && found>=2; // a veces va medio invisible
-  items.push(placeItem(target, rnd(24,34), camouflaged?rnd(.18,.3):1));
-  for(let i=0;i<n;i++) items.push(placeItem(decoys, rnd(22,36), 1));
+  items.push(placeItem(target, size, camouflaged?rnd(.18,.3):1));
+  for(let i=0;i<n;i++) items.push(placeItem(decoys, Math.max(14,size+rnd(-12,-5)), 1));
   // mezclar orden de dibujo
   items.sort(()=>Math.random()-.5);
   roundStart=performance.now();
@@ -92,7 +67,7 @@ function update(dt){
   timeLeft-=dt;
   $('time').innerText=Math.ceil(Math.max(0,timeLeft));
   if(flash){flash.t-=dt;if(flash.t<=0)flash=null;}
-  if(timeLeft<=0){ addScore(found); endRun('⏱️ SE ACABÓ EL TIEMPO','Encontraste '+found+' objetos · Fallos: '+misses); }
+  if(timeLeft<=0){ Arcade.addScore(pts); loadBest(); endRun('⏱️ SE ACABÓ EL TIEMPO','Encontraste '+found+' objetos · Puntos: '+pts+' · Fallos: '+misses); }
 }
 function draw(){
   ctx.fillStyle='#0f0f1a'; ctx.fillRect(0,0,W,H);
@@ -112,7 +87,7 @@ cv.addEventListener('pointerdown',e=>{
   if(hitIdx>=0 && items[hitIdx].e===target){
     const secs=(performance.now()-roundStart)/1000;
     const pts=Math.max(1,Math.round(20-secs*2));
-    found+=pts; $('found').innerText=found;
+    found++; pts+=pts; $('found').innerText=found; $('pts').innerText=pts;
     flash={x,y,t:.8,good:true,txt:'+'+pts};
     beep(800,.06);beep(1200,.08);
     nextTarget();
@@ -126,9 +101,10 @@ cv.addEventListener('pointerdown',e=>{
 $('btnStart').onclick=()=>start();
 $('btnAgain').onclick=()=>start();
 function start(){ $('ovStart').style.display='none'; $('ovEnd').style.display='none'; reset(); running=true; lastTs=performance.now(); requestAnimationFrame(loop); }
-function reset(){ found=0; misses=0; timeLeft=45; flash=null; $('found').innerText=0; $('misses').innerText=0; $('time').innerText=45; nextTarget(); draw(); }
+function reset(){ found=0; pts=0; misses=0; timeLeft=45; flash=null; $('pts').innerText=0; $('found').innerText=0; $('misses').innerText=0; $('time').innerText=45; nextTarget(); draw(); }
 function endRun(t,m){ running=false; $('endTitle').innerText=t; $('endMsg').innerText=m; $('ovEnd').style.display='flex'; beep(140,.3,'sawtooth'); beep(90,.4,'sawtooth'); }
-function loop(ts){ if(!running)return; const dt=Math.min(.033,(ts-lastTs)/1000); lastTs=ts; update(dt); draw(); if(running)requestAnimationFrame(loop); }
+function loop(ts){ if(!running)return; const dt=Math.min(.033,(ts-lastTs)/1000); lastTs=ts; if(!Arcade.isPaused())update(dt); draw(); if(running)requestAnimationFrame(loop); }
+Arcade.pausable(()=>{});
 reset();
 </script>
 </body>

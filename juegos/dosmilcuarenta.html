@@ -33,18 +33,8 @@
     <a class="back" href="juegos.html">← Volver al Menú</a>
 </div>
 
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { getFirestore, addDoc, collection } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-
-const firebaseConfig = { apiKey: "AIzaSyBmTBMyE7Y_LgSXH1SrmEv29DLYdxkyUEw", authDomain: "compartir-textos-app.firebaseapp.com", projectId: "compartir-textos-app", storageBucket: "compartir-textos-app.firebasestorage.app", messagingSenderId: "705083380628", appId: "1:705083380628:web:ce267570e09e3ef1b27581" };
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-let currentUser = null;
-onAuthStateChanged(auth, (u) => { if (u) currentUser = u; else window.location.href = '../index.html'; });
-
+<script src="arcade-lib.js"></script>
+<script>
 const SIZE=4; let g,score,overFlag=false,maxTile=0;
 const board=document.getElementById('board');
 
@@ -95,11 +85,12 @@ function move(dir){ // 0 izq, 1 arriba, 2 der, 3 abajo
   g=gg; score+=gainedTotal;
   g.forEach(row=>row.forEach(v=>{if(v>maxTile)maxTile=v;}));
   add(); render([],anyMerge?findMergedTiles():[]);
-  if(maxTile>=2048&&!wonNotified){wonNotified=true;alert('🎉 ¡2048! Eres una leyenda. Puedes seguir jugando.');}
+  if(maxTile>=2048&&!wonNotified){wonNotified=true;Arcade.toast('🎉 ¡2048! Eres una leyenda. ¡Sigue hasta que puedas!');}
   if(!canMove()){
     overFlag=true;
-    if(currentUser&&score>0)addDoc(collection(db,"scores"),{userId:currentUser.uid,gameId:'2048',score,timestamp:Date.now()}).catch(()=>{});
-    setTimeout(()=>{ if(confirm(`💀 Fin del juego. Puntuación: ${score}. ¿Nueva partida?`))reset(); },200);
+    Arcade.addScore(score);
+    Arcade.toast(`💀 Fin de la partida — ${score.toLocaleString()} pts`);
+    setTimeout(reset,1800);
   }
 }
 function findMergedTiles(){ return []; }

@@ -240,20 +240,20 @@
     document.body.appendChild(btn);
   }
 
-  /* ---------------- pausa con P ---------------- */
+  /* ---------------- pausa con P y auto-pausa al cambiar de pestaña ---------------- */
+  function setPause(on, silent) {
+    if (!resumeFn || on === paused) return;
+    paused = on;
+    if (on) { if (!silent) toast('⏸ PAUSA — pulsa P para continuar'); }
+    else { if (!silent) toast('▶ ¡Vamos!'); try { resumeFn(); } catch (err) {} }
+  }
   document.addEventListener('keydown', (e) => {
     if ((e.key === 'p' || e.key === 'P') && !/INPUT|TEXTAREA/.test((document.activeElement || {}).tagName || '')) {
-      if (!resumeFn) return;
-      paused = !paused;
-      if (paused) { toast('⏸ PAUSA — pulsa P para continuar'); }
-      else { toast('▶ ¡Vamos!'); try { resumeFn(); } catch (err) {} }
+      setPause(!paused);
     }
   });
-  window.addEventListener('blur', () => {           // auto-pausa al cambiar de pestaña
-    if (resumeFn && !paused && typeof running !== 'undefined' && running === true) {
-      paused = true; // el juego debe respetar la pausa vía Arcade.isPaused()
-    }
-  });
+  window.addEventListener('blur', () => setPause(true, true));   // auto-pausa suave
+  window.addEventListener('focus', () => { if (paused && resumeFn) setPause(false, true); });
 
   /* ---------------- toast ---------------- */
   function toast(msg) {
