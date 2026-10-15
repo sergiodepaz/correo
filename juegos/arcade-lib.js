@@ -46,7 +46,7 @@
   let saveQueue = {};              // gameId -> timeout (anti-duplicados)
   let lastSent = {};               // gameId -> última puntuación enviada a la nube
 
-  /* ---------------- pantalla de carga / login amigable ---------------- */
+  /* ---------------- pantalla de carga / aviso de login (no bloquea el juego) ---------------- */
   function showGate(text) {
     if (document.getElementById('arcade-gate')) {
       document.getElementById('arcade-gate-msg').textContent = text;
@@ -54,15 +54,17 @@
     }
     const gate = document.createElement('div');
     gate.id = 'arcade-gate';
-    gate.style.cssText = 'position:fixed;inset:0;z-index:10000;display:flex;flex-direction:column;' +
-      'align-items:center;justify-content:center;gap:18px;text-align:center;padding:20px;' +
-      'background:linear-gradient(135deg,#0f0c29 0%,#302b63 50%,#24243e 100%);color:#e8e8ff;';
+    // Barra superior fina + translúcida: se ve el juego detrás y no bloquea nada
+    gate.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:10000;display:flex;align-items:center;' +
+      'justify-content:center;gap:16px;padding:10px 16px;text-align:center;' +
+      'background:rgba(15,12,41,.85);backdrop-filter:blur(8px);color:#e8e8ff;' +
+      'border-bottom:1px solid rgba(102,126,234,.4);box-shadow:0 4px 20px rgba(0,0,0,.4);';
     gate.innerHTML =
-      '<div style="width:54px;height:54px;border-radius:50%;border:4px solid rgba(255,255,255,.15);' +
-      'border-top-color:#00f2fe;animation:arc-spin 0.9s linear infinite;"></div>' +
-      '<div id="arcade-gate-msg" style="font-size:1.1rem;letter-spacing:1px;">' + text + '</div>' +
+      '<div style="width:22px;height:22px;border-radius:50%;border:3px solid rgba(255,255,255,.15);' +
+      'border-top-color:#00f2fe;animation:arc-spin 0.9s linear infinite;flex:none;"></div>' +
+      '<div id="arcade-gate-msg" style="font-size:.95rem;letter-spacing:1px;">' + text + '</div>' +
       '<button id="arcade-login-btn" class="btn-neon" style="display:none;background:linear-gradient(90deg,#667eea,#764ba2);' +
-      'color:#fff;border:none;padding:14px 30px;border-radius:12px;font-size:1.05rem;font-weight:700;cursor:pointer;">' +
+      'color:#fff;border:none;padding:8px 18px;border-radius:10px;font-size:.9rem;font-weight:700;cursor:pointer;">' +
       'Iniciar sesión con Google</button>';
     const st = document.createElement('style');
     st.textContent = '@keyframes arc-spin{to{transform:rotate(360deg)}}';
@@ -77,43 +79,57 @@
     readyCbs.length = 0;
   }
 
-  /* ---------------- Firebase (carga diferida sólo si hay sesión) ---------------- */
-  async function loadModules() {
-    const [{ initializeApp }, { getAuth, onAuthStateChanged }, fb] = await Promise.all([
-      import('https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js'),
-      import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js'),
-      import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js'),
-    ]);
-    const app = initializeApp(FIREBASE_CFG);
-    auth = getAuth(app);
-    fs = fb.getFirestore(app);
-    return { fb, onAuthStateChanged };
+  /* ---------------- Firebase (carga diferida y con tiempo límite) ----------------
+     Clave de la carga rápida: NO esperamos a que Firebase responda para dejar
+     jugar. El juego arranca en cuanto el DOM está listo (o al máximo 900 ms).
+     Si la nube tarda o falla, se sigue jugando en modo local y los récords se
+     sincronizan en cuanto haya sesión. */
+  const FB_URL = 'https://www.gstatic.com/firebasejs/10.7.1/';
+  let gateHidden = false;
+
+  function withTimeout(promise, ms) {
+    return Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
   }
 
-  async function init() {
-    showGate('Conectando con tu arcade...');
-    let mod;
-    try { mod = await loadModules(); }
-    catch (e) {
-      showGate('Sin conexión con la nube: jugarás con récords locales.');
-      const b = document.getElementById('arcade-login-btn'); if (b) b.style.display = 'none';
-      setTimeout(hideGate, 1200);
-      return;
-    }
-    const { onAuthStateChanged } = mod;
-    onAuthStateChanged(auth, (u) => {
-      if (u) {
-        user = u;
-        setUid(u.uid);
-        hideGate();
-        fetchCloudBest();
-      } else {
-        user = null;
-        showGate('Inicia sesión para guardar tus récords 🏆');
-        const b = document.getElementById('arcade-login-btn'); if (b) b.style.display = '';
-        // deja jugar igualmente tras unos segundos (modo invitado local)
-        setTimeout(() => { if (!user) hideGate(); }, 4000);
-      }
+  async function loadModules() {
+    const [{ initializeApp }, authMod, fb] = await Promise.all([
+      withTimeout(import(FB_URL + 'firebase-app.js'), 6000),
+      withTimeout(import(FB_URL + 'firebase-auth.js'), 6000),
+      withTimeout(import(FB_URL + 'firebase-firestore.js'), 6000),
+    ]);
+    const app = initializeApp(FIREBASE_CFG);
+    auth = authMod.getAuth(app);
+    fs = fb.getFirestore(app);
+    return { authMod, fb };
+  }
+
+  function init() {
+    showGate('Preparando tu arcade...');
+
+    // Arranque inmediato del juego (sin esperar a la nube)
+    const startNow = () => { if (!gateHidden) { gateHidden = true; hideGate(); } };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', startNow);
+    else startNow();
+    setTimeout(startNow, 900); // red lenta: no bloqueamos más de 900 ms
+
+    // Conexión con la nube en segundo plano (no bloquea nunca el juego)
+    loadModules().then(({ authMod, fb }) => {
+      const { onAuthStateChanged } = authMod;
+      onAuthStateChanged(auth, (u) => {
+        if (u) {
+          user = u;
+          setUid(u.uid);
+          startNow();
+          fetchCloudBest();
+        } else {
+          user = null;
+          // aviso suave por toast: no tapamos el juego con una pantalla
+          toast('💡 Inicia sesión en el Hub para guardar récords en la nube');
+        }
+      });
+    }).catch(() => {
+      fs = null; auth = null;
+      toast('Sin conexión con la nube: récords guardados en local');
     });
   }
 

@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Regate Infinito - Sergio's Arcade</title>
+<link rel="stylesheet" href="arcade.css">
+<style>canvas{cursor:pointer;} #msg{min-height:24px;font-weight:800;color:#ffd700;letter-spacing:1px;}</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hud">
+    <span>REGATES<b id="hudScore">0</b></span>
+    <span>SUPERACIÓN<b id="hudDist">0m</b></span>
+  </div>
+  <div id="msg">Mueve el balón con ← → (o arrastra) y esquiva a los defensas ⚽</div>
+  <canvas id="game" width="420" height="560"></canvas>
+  <div class="overlay" id="overlay">
+    <h2>⛹️ REGATE INFINITO</h2>
+    <p>Conduce hacia arriba sin parar. Los defensas entran desde arriba: crúzalos por el hueco libre. Cada regate suma; chocar = final de la jugada.</p>
+    <button class="btn-neon" id="startBtn">▶ CHUTA Y CORRE</button>
+  </div>
+  <a class="back" href="juegos.html">← Volver al Menú</a>
+</div>
+
+<script src="arcade-lib.js"></script>
+<script>
+const cv=document.getElementById('game'),ctx=cv.getContext('2d');
+const $=id=>document.getElementById(id);
+const W=cv.width,H=cv.height;
+let player={x:W/2,y:H-90,r:16}, enemies=[], stars=[], score=0, dist=0, speed=3, running=false, lastTs=0, spawnT=0, keys={}, stripes=0;
+
+function spawnEnemy(){
+  const lane=40+Math.random()*(W-80);
+  const types=['🔴','🟠','🟣'];
+  enemies.push({x:lane,y:-30,r:16,vx:(Math.random()<.3?(Math.random()*2-1)*1.6:0),type:types[Math.floor(Math.random()*types.length)],passed:false});
+}
+function spawnStar(){ stars.push({x:30+Math.random()*(W-60),y:-20,r:10}); }
+
+function step(dt){
+  const sp=(keys.left?-1:0)+(keys.right?1:0);
+  player.x+=sp*260*dt;
+  if(touch!==null){ const t=Math.max(20,Math.min(W-20,touch)); player.x+=(t-player.x)*Math.min(1,dt*12); }
+  player.x=Math.max(player.r,Math.min(W-player.r,player.x));
+  dist+=speed*dt*8; $('hudDist').textContent=Math.floor(dist)+'m';
+  speed=3+dist/220;
+  stripes+=speed*dt*30;
+
+  spawnT-=dt;
+  if(spawnT<=0){ spawnEnemy(); if(Math.random()<.3) spawnStar(); spawnT=Math.max(.35,1.1-dist/900); }
+
+  for(const e of enemies){
+    e.y+=speed*60*dt*1.15; e.x+=e.vx*60*dt;
+    if(e.x<20||e.x>W-20)e.vx*=-1;
+    if(!e.passed&&e.y>player.y+24){ e.passed=true; score++; $('hudScore').textContent=score; Arcade.beep(700,.03,'triangle',.06); }
+    if(Math.hypot(e.x-player.x,e.y-player.y)<e.r+player.r-4){ gameOver(); return; }
+  }
+  enemies=enemies.filter(e=>e.y<H+40);
+  for(const s of stars){
+    s.y+=speed*60*dt;
+    if(Math.hypot(s.x-player.x,s.y-player.y)<s.r+player.r){ score+=5; $('hudScore').textContent=score; s.dead=true; Arcade.beep(1046,.06,'triangle',.09); }
+  }
+  stars=stars.filter(s=>!s.dead&&s.y<H+30);
+}
+
+function gameOver(){
+  running=false;
+  Arcade.beep(180,.3,'sawtooth',.1); setTimeout(()=>Arcade.beep(120,.4,'sawtooth',.1),180);
+  Arcade.addScore(score);
+  const ov=$('overlay'); ov.style.display='flex';
+  ov.querySelector('h2').textContent='🟥 TE HAN ROBADO';
+  ov.querySelector('p').innerHTML=`${score} regates · ${Math.floor(dist)} metros conducidos.<br>El VAR confirma: entrada limpia del defensa.`;
+  ov.querySelector('button').textContent='▶ OTRA JUGADA';
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  // campo con franjas en movimiento
+  for(let i=-1;i<10;i++){ const y=i*70+(stripes%70);
+    ctx.fillStyle=((i+100)%2)?'#14532d':'#166534'; ctx.fillRect(0,y,W,70); }
+  ctx.strokeStyle='rgba(255,255,255,.35)'; ctx.lineWidth=3;
+  ctx.beginPath(); ctx.moveTo(W/2,0); ctx.lineTo(W/2,H); ctx.stroke();
+  ctx.beginPath(); ctx.arc(W/2,H/2,60,0,7); ctx.stroke();
+  // líneas de banda
+  ctx.fillStyle='rgba(255,255,255,.5)'; ctx.fillRect(0,0,6,H); ctx.fillRect(W-6,0,6,H);
+  // estrellas (regates bonus)
+  for(const s of stars){ ctx.font='22px serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('⭐',s.x,s.y); }
+  // defensas
+  for(const e of enemies){
+    ctx.fillStyle=e.type==='🔴'?'#ff4d4d':e.type==='🟠'?'#ffa64d':'#b04dff';
+    ctx.beginPath(); ctx.arc(e.x,e.y,e.r,0,7); ctx.fill();
+    ctx.strokeStyle='rgba(0,0,0,.4)'; ctx.stroke();
+    ctx.fillStyle='#fff'; ctx.font='14px serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('🛡',e.x,e.y+1);
+  }
+  // jugador + balón
+  ctx.save(); ctx.translate(player.x,player.y);
+  ctx.fillStyle='#00f2fe'; ctx.beginPath(); ctx.arc(0,-6,player.r,0,7); ctx.fill();
+  ctx.strokeStyle='#045'; ctx.lineWidth=2; ctx.stroke();
+  ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(0,14,9,0,7); ctx.fill();
+  ctx.fillStyle='#111'; ctx.beginPath(); ctx.arc(0,14,3,0,7); ctx.fill();
+  ctx.restore();
+}
+function loop(ts){
+  if(!running)return;
+  const dt=Math.min(.05,(ts-lastTs)/1000)||0; lastTs=ts;
+  if(!Arcade.isPaused()) step(dt);
+  draw();
+  if(running) requestAnimationFrame(loop);
+}
+
+addEventListener('keydown',e=>{ if(e.key==='ArrowLeft'||e.key.toLowerCase()==='a')keys.left=1;
+  if(e.key==='ArrowRight'||e.key.toLowerCase()==='d')keys.right=1; });
+addEventListener('keyup',e=>{ if(e.key==='ArrowLeft'||e.key.toLowerCase()==='a')keys.left=0;
+  if(e.key==='ArrowRight'||e.key.toLowerCase()==='d')keys.right=0; });
+let touch=null;
+cv.addEventListener('pointerdown',e=>{const r=cv.getBoundingClientRect();touch=(e.clientX-r.left)*(W/r.width);cv.setPointerCapture(e.pointerId);});
+cv.addEventListener('pointermove',e=>{ if(touch===null)return; const r=cv.getBoundingClientRect();touch=(e.clientX-r.left)*(W/r.width); });
+cv.addEventListener('pointerup',()=>touch=null);
+
+$('startBtn').addEventListener('click',()=>{
+  $('overlay').style.display='none';
+  enemies=[];stars=[];score=0;dist=0;speed=3;spawnT=.4;player.x=W/2;
+  $('hudScore').textContent=0;$('hudDist').textContent='0m';
+  running=true;lastTs=performance.now();requestAnimationFrame(loop);
+});
+draw();
+</script>
+</body>
+</html>

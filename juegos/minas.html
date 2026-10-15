@@ -82,6 +82,7 @@ function win(){
   const score=Math.max(100, N*N*100 - secs*10 - M*5);
   document.getElementById('msg').innerText=`🎉 ¡Campo despejado en ${secs}s! +${score} pts`;
   Arcade.addScore(score);
+}
 function lose(chord){
   over=true; clearInterval(timer); revealAllMines();
   document.getElementById('msg').innerText='💥 ¡Boom! Has pisado una mina. Pulsa un tamaño para reiniciar.';

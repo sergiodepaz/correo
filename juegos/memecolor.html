@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Memoria de Colores - Sergio's Arcade</title>
+<link rel="stylesheet" href="arcade.css">
+<style>
+  #grid{display:grid;gap:10px;margin:6px auto 14px;}
+  .cell{width:64px;height:64px;border-radius:12px;background:#1c2340;border:2px solid rgba(255,255,255,.12);cursor:pointer;transition:transform .12s, box-shadow .2s;}
+  .cell:hover{transform:scale(1.05);}
+  .cell.sel{box-shadow:0 0 14px rgba(255,255,255,.5) inset;}
+  .cell.wrong{animation:shake .3s;}
+  @keyframes shake{25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+  #msg{min-height:26px;font-weight:800;color:#00f2fe;letter-spacing:1px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hud">
+    <span>NIVEL<b id="hudLvl">1</b></span>
+    <span>PUNTOS<b id="hudScore">0</b></span>
+    <span>VIDAS<b id="hudLives">❤️❤️❤️</b></span>
+  </div>
+  <div id="msg">Observa la rejilla…</div>
+  <div id="grid"></div>
+  <div class="overlay" id="overlay">
+    <h2>🎨 MEMORIA DE COLORES</h2>
+    <p>Durante unos segundos verás una rejilla con casillas de colores. Cuando se apague, vuelve a colocar cada color en su sitio exacto. Cada nivel añade más colores y menos tiempo.</p>
+    <button class="btn-neon" id="startBtn">▶ MEMORIZAR</button>
+  </div>
+  <a class="back" href="juegos.html">← Volver al Menú</a>
+</div>
+
+<script src="arcade-lib.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+// 9 colores disponibles (más variedad que en otros juegos del hub)
+const COLORS=['#ff4d4d','#ffa64d','#ffe94d','#4dff88','#4dd2ff','#7a5cff','#ff5ce1','#9e6b3c','#e8e8e8'];
+let size=4, cells=[], pattern={}, level=1, score=0, lives=3, phase='idle', picks={};
+
+function buildGrid(){
+  const g=$('grid'); g.innerHTML=''; picks={};
+  g.style.gridTemplateColumns=`repeat(${size},64px)`;
+  cells=[];
+  for(let i=0;i<size*size;i++){
+    const c=document.createElement('div'); c.className='cell'; c.dataset.i=i;
+    c.addEventListener('click',()=>pick(i,c));
+    g.appendChild(c); cells.push(c);
+  }
+}
+function makePattern(){
+  pattern={};
+  const nCol=Math.min(3+Math.floor(level/2),COLORS.length); // nº de colores usados crece
+  const filled=Math.min(size*size-2, 4+level*2);            // nº de casillas coloreadas crece
+  const idx=[...Array(size*size).keys()].sort(()=>Math.random()-.5).slice(0,filled);
+  idx.forEach((i,k)=>pattern[i]=COLORS[k%nCol]);
+}
+function showPattern(ms){
+  buildGrid(); makePattern();
+  Object.entries(pattern).forEach(([i,c])=>cells[i].style.background=c);
+  $('msg').textContent=`Memoriza ${Object.keys(pattern).length} colores (${nColorsUsed()} tonos)…`;
+  phase='memorize';
+  setTimeout(()=>{
+    if(phase!=='memorize')return;
+    cells.forEach(c=>c.style.background='#1c2340');
+    $('msg').textContent='Ahora reprodúcela: selecciona casilla y luego un color 👇';
+    phase='reproduce';
+  },ms);
+}
+function nColorsUsed(){ return new Set(Object.values(pattern)).size; }
+
+function pick(i,el){
+  if(phase!=='reproduce')return;
+  document.querySelectorAll('.cell.sel').forEach(c=>c.classList.remove('sel'));
+  el.classList.add('sel'); el.dataset.selected='1';
+  openPalette(i,el);
+}
+function openPalette(i,el){
+  let pal=document.getElementById('palette');
+  if(!pal){pal=document.createElement('div');pal.id='palette';
+    pal.style.cssText='display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:6px;';
+    $('grid').after(pal);}
+  pal.innerHTML='';
+  const used=nColorsUsed();
+  COLORS.slice(0,used).forEach(col=>{
+    const b=document.createElement('button');
+    b.style.cssText=`width:44px;height:44px;border-radius:10px;background:${col};border:2px solid rgba(255,255,255,.3);cursor:pointer;`;
+    b.onclick=()=>applyColor(i,el,col,pal);
+    pal.appendChild(b);
+  });
+  const clear=document.createElement('button');
+  clear.textContent='✖'; clear.title='Quitar color';
+  clear.style.cssText='width:44px;height:44px;border-radius:10px;background:#1c2340;color:#fff;border:2px solid rgba(255,255,255,.2);cursor:pointer;font-size:1.1rem;';
+  clear.onclick=()=>{delete picks[i];el.style.background='#1c2340';pal.remove();};
+  pal.appendChild(clear);
+}
+function applyColor(i,el,col,pal){
+  picks[i]=col; el.style.background=col; el.classList.remove('sel'); pal.remove();
+  if(Object.keys(picks).length+countEmptyNeeded()===0) check();
+  if(Object.keys(picks).length>=Object.keys(pattern).length) check();
+}
+function countEmptyNeeded(){return 0;}
+
+function check(){
+  phase='check';
+  let ok=true;
+  for(const [i,c] of Object.entries(pattern)) if(picks[i]!==c) ok=false;
+  for(const i of Object.keys(picks)) if(pattern[i]===undefined) ok=false;
+  if(ok){
+    const bonus=Math.max(0,20-level);
+    score+=50+bonus; level++;
+    $('hudScore').textContent=score; $('hudLvl').textContent=level;
+    $('msg').textContent=`✅ ¡Perfecto! +${50+bonus} pts`;
+    Arcade.beep(880,.08,'triangle',.1); setTimeout(()=>Arcade.beep(1174,.12,'triangle',.1),90);
+    if(level%3===0&&size<6){size++;$('msg').textContent=`🔼 ¡Rejilla ${size}x${size}!`;}
+    setTimeout(()=>showPattern(Math.max(1600,4200-level*220)),1200);
+  } else {
+    lives--;
+    $('hudLives').textContent='❤️'.repeat(Math.max(0,lives))||'💀';
+    $('msg').textContent='❌ No coincide… te enseñamos los fallos';
+    Arcade.beep(200,.25,'sawtooth',.09);
+    // mostrar solución 1.5s
+    cells.forEach((c,idx)=>{ if(pattern[idx]){c.style.background=pattern[idx];c.classList.add('wrong');} });
+    setTimeout(()=>{
+      cells.forEach(c=>c.classList.remove('wrong'));
+      if(lives<=0) endGame(); else showPattern(Math.max(1600,4200-level*220));
+    },1600);
+  }
+}
+function endGame(){
+  Arcade.addScore(score);
+  const ov=$('overlay'); ov.style.display='flex';
+  ov.querySelector('h2').textContent=`NIVEL ${level-1} ALCANZADO`;
+  ov.querySelector('p').innerHTML=`Puntuación: <b style="color:#ffd700">${score}</b> pts.<br>Tu cerebro pide más series.`;
+  ov.querySelector('button').textContent='▶ REINTENTAR';
+}
+$('startBtn').addEventListener('click',()=>{
+  $('overlay').style.display='none';
+  size=4;level=1;score=0;lives=3;
+  $('hudLvl').textContent=1;$('hudScore').textContent=0;$('hudLives').textContent='❤️❤️❤️';
+  showPattern(3800);
+});
+buildGrid();
+</script>
+</body>
+</html>
