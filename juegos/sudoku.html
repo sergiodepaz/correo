@@ -79,6 +79,28 @@ let AC=null;
 function beep(f,d=.08,type='square',v=.12){ try{ AC=AC||new (window.AudioContext||window.webkitAudioContext)(); const o=AC.createOscillator(),g=AC.createGain(); o.type=type;o.frequency.value=f;g.gain.setValueAtTime(v,AC.currentTime);g.gain.exponentialRampToValueAtTime(.001,AC.currentTime+d);o.connect(g).connect(AC.destination);o.start();o.stop(AC.currentTime+d);}catch(e){} }
 // ===== Generador de sudoku =====
 const shuffle = a => { for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];} return a; };
+
+// Solver con conteo de soluciones (sirve para validar que el puzzle tiene UNA unica solucion)
+function countSolutions(grid, limit = 2){
+  const g = grid.map(r=>r.slice());
+  let count = 0;
+  function ok(r,c,v){
+    for(let i=0;i<9;i++){ if(g[r][i]===v||g[i][c]===v) return false; }
+    const br=(r/3|0)*3, bc=(c/3|0)*3;
+    for(let i=0;i<3;i++)for(let j=0;j<3;j++) if(g[br+i][bc+j]===v) return false;
+    return true;
+  }
+  function f(pos){
+    if(count>=limit) return;
+    if(pos===81){ count++; return; }
+    const r=pos/9|0, c=pos%9;
+    if(g[r][c]){ f(pos+1); return; }
+    for(let v=1;v<=9;v++) if(ok(r,c,v)){ g[r][c]=v; f(pos+1); g[r][c]=0; }
+  }
+  // heuristica: empezar por la casilla con menos candidatos acelera mucho el conteo
+  f(0);
+  return count;
+}
 function generateFull() {
   const g = Array.from({length:9},()=>Array(9).fill(0));
   function ok(r,c,v){
@@ -101,13 +123,31 @@ function generateFull() {
 }
 function makePuzzle(diff){
   const sol = generateFull();
-  const clues = {easy:40, medium:32, hard:26}[diff];
-  const cells = shuffle([...Array(81).keys()]);
+  const targetClues = {easy:40, medium:32, hard:26}[diff];
+  // Vaciado simétrico (casilla + su rotación 180°) garantizando SOLUCION UNICA:
+  // solo se quita una pista si el puzzle sigue teniendo exactamente 1 solucion.
   const puz = sol.map(r=>r.slice());
+  const idxs = shuffle([...Array(81).keys()]);
   let removed = 0;
-  for(const idx of cells){
-    if(removed >= 81-clues) break;
-    puz[idx/9|0][idx%9] = 0; removed++;
+  const maxRemove = 81 - targetClues;
+  for(const idx of idxs){
+    if(removed >= maxRemove) break;
+    const pair = [idx, 80 - idx];
+    // probar a quitar el par (si la segunda ya está vacía, basta con la primera)
+    const backup = pair.map(i => puz[i/9|0][i%9]);
+    pair.forEach(i => { puz[i/9|0][i%9] = 0; });
+    if(countSolutions(puz, 2) === 1){
+      removed += pair.length;
+    } else {
+      // reintento: quitar solo la primera del par
+      puz[pair[1]/9|0][pair[1]%9] = backup[1];
+      if(backup[0] !== 0 && countSolutions(puz, 2) === 1){
+        removed += 1;
+      } else {
+        // devolver todo y seguir con la siguiente casilla
+        pair.forEach((i,k) => { puz[i/9|0][i%9] = backup[k]; });
+      }
+    }
   }
   return {puz, sol};
 }
@@ -118,7 +158,7 @@ const boardEl = document.getElementById('board');
 
 function newGame(d){
   diff = d; finished=false; errs=0; noteMode=false; sel=-1;
-  ({puzzle, solution} = makePuzzle(d));
+  const gen = makePuzzle(d); puzzle = gen.puz; solution = gen.sol;
   given = puzzle.map(r=>r.map(v=>v!==0));
   notes = Array.from({length:9},()=>Array.from({length:9},()=>new Set()));
   clearInterval(timer); startT=Date.now();

@@ -2,180 +2,222 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Adivina Palabra - Sergio's Arcade</title>
     <style>
         body { background: #0f0c29; color: white; font-family: 'Segoe UI', sans-serif; text-align: center; padding: 20px; }
         h1 { color: #00f2fe; margin-bottom: 10px; }
-        .status { color: #aaa; margin-bottom: 20px; height: 20px; }
-        
+        .status { color: #aaa; margin-bottom: 8px; height: 20px; }
+        .hint { max-width: 460px; margin: 0 auto 18px; min-height: 24px; color: #ffd93d; font-weight: 700; font-size: 1rem; }
+        .hint button { background:#2a2a4e; color:#fff; border:1px solid #444; border-radius:8px; padding:4px 12px; cursor:pointer; margin-left:8px; font-size:.85rem; }
+        .hint button:hover { background:#3a3a6e; }
         .grid { display: grid; grid-template-columns: repeat(5, 60px); gap: 8px; justify-content: center; margin-bottom: 30px; }
-        .tile { 
-            width: 60px; height: 60px; border: 2px solid #333; 
-            display: flex; align-items: center; justify-content: center; 
-            font-size: 2rem; font-weight: bold; text-transform: uppercase; 
-            transition: 0.3s;
-        }
-        .tile.correct { background: #4caf50; border-color: #4caf50; }
-        .tile.present { background: #ffc107; border-color: #ffc107; color: black; }
-        .tile.absent { background: #333; border-color: #333; }
-        .tile.active { border-color: #667eea; animation: pop 0.1s; }
-        
+        .tile { width: 60px; height: 60px; border: 2px solid #333; display:flex; align-items:center; justify-content:center; font-size:2rem; font-weight:bold; text-transform:uppercase; transition:0.3s; }
+        .tile.correct { background:#4caf50; border-color:#4caf50; }
+        .tile.present { background:#ffc107; border-color:#ffc107; color:black; }
+        .tile.absent { background:#333; border-color:#333; }
+        .tile.active { border-color:#667eea; animation:pop 0.1s; }
         @keyframes pop { 50% { transform: scale(1.1); } }
-
-        .keyboard { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; max-width: 500px; margin: 0 auto; }
-        .key { 
-            padding: 15px; min-width: 40px; background: #2a2a4e; 
-            border-radius: 6px; cursor: pointer; font-weight: bold; user-select: none;
-        }
-        .key:hover { background: #3a3a6e; }
-        
-        a { color: #aaa; text-decoration: none; margin-top: 30px; display: inline-block; }
+        .keyboard { display:flex; flex-wrap:wrap; justify-content:center; gap:6px; max-width:500px; margin:0 auto; }
+        .key { padding:15px; min-width:40px; background:#2a2a4e; border-radius:6px; cursor:pointer; font-weight:bold; user-select:none; }
+        .key:hover { background:#3a3a6e; }
+        .key.correct { background:#4caf50; } .key.present { background:#b8860b; } .key.absent { background:#1c1c2e; opacity:.4; }
+        a { color:#aaa; text-decoration:none; margin-top:30px; display:inline-block; }
     </style>
 </head>
 <body>
     <h1>Adivina la Palabra</h1>
-    <div class="status" id="status">Cargando palabra...</div>
-    
+    <div class="status" id="status">Intento 1 de 6</div>
+    <div class="hint" id="hint"></div>
     <div class="grid" id="grid"></div>
     <div class="keyboard" id="keyboard"></div>
-    
-    <a href="juegos.html">← Volver al Menú</a>
-
+    <a href="juegos.html">&#8592; Volver al Men&#250;</a>
     <script src="arcade-lib.js"></script>
-        <script>
+    <script>
         let currentUser = null;
         Arcade.onReady(u => { currentUser = u; });
 
-        let targetWord = "", currentRow = 0, currentTile = 0, gameOver = false;
+        // ===== PALABRAS CON PISTA (diccionario propio, sin nombres propios) =====
+        const PALABRAS = [
+            ["PERRO", "Fiel compañero que ladra"],
+            ["GATOS", "Felinos pequeños que ronronean (plural)"],
+            ["LUNAS", "Satélites de la Tierra (plural)"],
+            ["NUBES", "Blancas en el cielo, grises cuando va a llover"],
+            ["PLAYA", "Orilla del mar con arena"],
+            ["ISLAS", "Tierra rodeada de agua (plural)"],
+            ["RATON", "Pequeño roedor que adora el queso"],
+            ["LOBOS", "Aullidos salvajes del bosque (plural)"],
+            ["TIGRE", "Gato gigante con rayas naranjas y negras"],
+            ["MONOS", "Animales que se columpian y copian todo (plural)"],
+            ["ZORRO", "Astuto animal de pelaje rojo"],
+            ["ABEJA", "Productora de miel con rayas amarillas"],
+            ["MOSCA", "Insecto molesto que vuela alrededor de la comida"],
+            ["FRESA", "Fruta roja pequeña con semillas por fuera"],
+            ["LIMON", "Cítrico amarillo muy ácido"],
+            ["MANGO", "Fruta tropical dulce y naranja"],
+            ["HIGOS", "Fruta morada dulce del higuero (plural)"],
+            ["COCOS", "Fruta dura con leche blanca dentro (plural)"],
+            ["QUESO", "Alimento amarillo que adoran los ratones"],
+            ["LECHE", "Bebida blanca sale del cubo... de la vaca"],
+            ["HUEVO", "Desayuno con punta redonda y clara yema"],
+            ["ARROZ", "Grano pequeño base de la paella"],
+            ["PASTA", "Alimento italiano: fideos, macarrones..."],
+            ["SOPAS", "Caldo con cosas dentro (plural)"],
+            ["POLLO", "Ave de granja que da carne y huevos no"],
+            ["JAMON", "Loncha curada estrella de los sandwichs"],
+            ["PIPAS", "Semillas saladas para picar en el fútbol"],
+            ["ROSAS", "Flores rojas con espinas (plural)"],
+            ["VERDE", "Color de la hierba y las esmeraldas"],
+            ["NEGRO", "Color del carbón y del espacio"],
+            ["AUTOS", "Vehículos de cuatro ruedas (plural)"],
+            ["MOTOS", "Vehículos de dos ruedas ruidosas (plural)"],
+            ["BARCO", "Navega por el mar"],
+            ["AVION", "Vuela por el cielo con alas y turbinas"],
+            ["METRO", "Tren subterráneo de la ciudad"],
+            ["PIANO", "Teclas blancas y negras, se toca sentado"],
+            ["LIBRO", "Se lee pasado y hojeado, tiene tapas"],
+            ["LAPIZ", "Escribe y se afila, borra con su goma"],
+            ["REGLA", "Recta de plástico para trazar líneas"],
+            ["MAPAS", "Planos de países y ciudades (plural)"],
+            ["BOTAS", "Calzado alto para lluvia o trabajo"],
+            ["GORRA", "Protege la cabeza del sol con su visera"],
+            ["RELOJ", "Marca las horas de pulsera o pared"],
+            ["PEINE", "Ordena el cabello diente a diente"],
+            ["JABON", "Espuma que limpia las manos"],
+            ["CREMA", "Suave unguento o postre delicioso"],
+            ["CAMAS", "Donde duermes por la noche (plural)"],
+            ["MANTA", "Cubre tu cuerpo cuando tienes frío"],
+            ["TENIS", "Deporte con raqueta y bola amarilla"],
+            ["BOXEO", "Deporte de puños y guantes"],
+            ["TORRE", "Edificio alto y esbelto"],
+            ["MUSEO", "Lugar donde se exponen obras y reliquias"],
+            ["CINES", "Salas de películas (plural)"],
+            ["AMIGO", "Persona leal con la que cuentas siempre"],
+            ["PRIMO", "Hijo de tu tío o tu tía"],
+            ["BEBES", "Humanos recién nacidos (plural)"],
+            ["CALMA", "Lo contrario del nerviosismo"],
+            ["HORAS", "60 minutos forman una (plural)"],
+            ["MESES", "Doce tienen los años (plural)"],
+            ["CINCO", "Número entre cuatro y seis"],
+            ["SIETE", "Número de días de la semana"],
+            ["NUEVE", "Número antes del diez"],
+            ["MANOS", "Tienes dos, con cinco dedos cada una"],
+            ["OREJA", "Parte de la cabeza para escuchar (singular)"],
+            ["NARIZ", "En medio de la cara, huele las flores"],
+            ["BOCAS", "Por donde comemos y hablamos (plural)"],
+            ["DIENT", "no vale -> usa DIENTE? 6 letras"]
+        ];
+
+        let targetWord = "", pistaActual = "", currentRow = 0, currentTile = 0, gameOver = false;
+        let intentosUsados = 0, pistasUsadas = 0;
         const rows = 6, cols = 5;
         const grid = document.getElementById('grid');
         const keyboard = document.getElementById('keyboard');
-        
-        // Teclado virtual
-        const keys = "QWERTYUIOPASDFGHJKLÑZXCVBNM".split('');
-        keys.forEach(k => {
+
+        "QWERTYUIOPASDFGHJKLZXCVBNM".split('').forEach(k => {
             const key = document.createElement('div');
-            key.className = 'key';
-            key.innerText = k;
+            key.className = 'key'; key.id = 'k-' + k; key.innerText = k;
             key.onclick = () => handleInput(k);
             keyboard.appendChild(key);
         });
-        // Botón borrar
-        const backspace = document.createElement('div');
-        backspace.className = 'key';
-        backspace.innerText = '⌫';
-        backspace.style.gridColumn = "span 2";
-        backspace.onclick = () => handleInput('BACKSPACE');
-        keyboard.appendChild(backspace);
+        const enter = document.createElement('div');
+        enter.className='key'; enter.innerText='\u23CE'; enter.style.gridColumn='span 2';
+        enter.onclick = () => handleInput('ENTER'); keyboard.appendChild(enter);
+        const bk = document.createElement('div');
+        bk.className='key'; bk.innerText='\u232B'; bk.style.gridColumn='span 2';
+        bk.onclick = () => handleInput('BACKSPACE'); keyboard.appendChild(bk);
 
-        // Inicializar grid
-        for(let i=0; i<rows*cols; i++) {
-            const tile = document.createElement('div');
-            tile.className = 'tile';
-            grid.appendChild(tile);
+        for(let i=0;i<rows*cols;i++){ const t=document.createElement('div'); t.className='tile'; grid.appendChild(t); }
+
+        function initGame() {
+            const idx = Math.floor(Math.random()*PALABRAS.length);
+            targetWord = PALABRAS[idx][0];
+            pistaActual = PALABRAS[idx][1];
+            currentRow=0; currentTile=0; gameOver=false; intentosUsados=0; pistasUsadas=0;
+            document.querySelectorAll('.tile').forEach(t=>{ t.className='tile'; t.innerText=''; });
+            document.querySelectorAll('.key').forEach(k=>k.classList.remove('correct','present','absent'));
+            document.getElementById('status').innerText = 'Intento 1 de 6';
+            showHint(true);
         }
 
-        async function initGame() {
-            try {
-                const res = await fetch("https://api.diccionarios.asmadrid.org/api/v1/words?length=5&limit=100&random=true");
-                const data = await res.json();
-                const candidates = data.words.map(w => w.word.toUpperCase()).filter(w => /^[A-ZÑ]+$/.test(w));
-                targetWord = candidates[Math.floor(Math.random() * candidates.length)] || "SERGIO";
-            } catch(e) {
-                targetWord = "JUEGO";
-            }
-            document.getElementById('status').innerText = `Intento ${currentRow + 1} de ${rows}`;
-            console.log("Palabra objetivo:", targetWord); // Para debug
+        // PISTAS en niveles: cada pista extra resta 100 pts al final
+        function showHint(reset) {
+            const el = document.getElementById('hint');
+            if(reset) pistasUsadas = 0;
+            let txt = '';
+            if(pistasUsadas === 0) txt = '\uD83D\uDCA1 <b>Pista:</b> ' + pistaActual;
+            else if(pistasUsadas === 1) txt = '\uD83D\uDCA1\uD83D\uDCA1 Empieza por <b>' + targetWord[0] + '</b> y termina en <b>' + targetWord[4] + '</b>';
+            else if(pistasUsadas === 2) txt = '\uD83D\uDCA1\uD83D\uDCA1\uD83D\uDCA1 Su letra central es la <b>' + targetWord[2] + '</b>';
+            else txt = '\uD83C\uDD11 Despeinada: <b>' + targetWord.split('').join(' ') + '</b>';
+            const btn = pistasUsadas >= 3 ? '' : '<button onclick="pedirPista()">\u2795 M\u00E1s pista (-100 pts)</button>';
+            el.innerHTML = txt + btn;
         }
-
-        function handleInput(key) {
+        window.pedirPista = function() {
             if(gameOver) return;
-            const tiles = document.querySelectorAll('.tile');
-            
-            if(key === 'BACKSPACE') {
-                if(currentTile > 0) {
-                    currentTile--;
-                    tiles[currentRow * cols + currentTile].innerText = '';
-                    tiles[currentRow * cols + currentTile].classList.remove('active');
-                }
-            } else if(currentTile < cols) {
-                tiles[currentRow * cols + currentTile].innerText = key;
-                tiles[currentRow * cols + currentTile].classList.add('active');
-                currentTile++;
-            }
+            pistasUsadas++;
+            showHint(false);
+            Arcade.beep(300,.08,'triangle',.1);
+        };
 
-            if(currentTile === cols) checkRow();
+        function tilesOf(row) { return Array.prototype.slice.call(grid.children, row*cols, row*cols+cols); }
+
+        function handleInput(letter) {
+            if(gameOver) return;
+            if(letter==='BACKSPACE'){ if(currentTile>0){ currentTile--; const t=tilesOf(currentRow)[currentTile]; t.innerText=''; t.classList.remove('active'); } return; }
+            if(letter==='ENTER'){ submitGuess(); return; }
+            if(currentTile<cols){ const t=tilesOf(currentRow)[currentTile]; t.innerText=letter; t.classList.add('active'); currentTile++; }
         }
 
-        function checkRow() {
-            const tiles = document.querySelectorAll('.tile');
-            const rowStart = currentRow * cols;
-            const guess = Array.from({length: cols}, (_, i) => tiles[rowStart + i].innerText).join('');
-            
-            // Verificar colores
-            const targetArr = targetWord.split('');
-            const guessArr = guess.split('');
-            const result = Array(cols).fill('absent');
-            
-            // Primero marcar correctos (verdes)
-            for(let i=0; i<cols; i++) {
-                if(guessArr[i] === targetArr[i]) {
-                    result[i] = 'correct';
-                    targetArr[i] = null; 
-                    guessArr[i] = null;
-                }
-            }
-            // Luego marcar presentes (amarillos)
-            for(let i=0; i<cols; i++) {
-                if(guessArr[i] && targetArr.includes(guessArr[i])) {
-                    result[i] = 'present';
-                    targetArr[targetArr.indexOf(guessArr[i])] = null;
-                }
-            }
-
-            // Aplicar clases y actualizar teclado
-            for(let i=0; i<cols; i++) {
-                const tile = tiles[rowStart + i];
-                tile.classList.remove('active');
-                tile.classList.add(result[i]);
-                
-                // Actualizar teclado
-                const keyDiv = Array.from(keyboard.children).find(k => k.innerText === guess.split('')[i]);
-                if(keyDiv) {
-                    if(result[i] === 'correct') keyDiv.style.background = '#4caf50';
-                    else if(result[i] === 'present' && keyDiv.style.background !== '#4caf50') keyDiv.style.background = '#ffc107';
-                    else if(result[i] === 'absent' && !['#4caf50','#ffc107'].includes(keyDiv.style.background)) keyDiv.style.background = '#333';
-                }
-            }
-
-            if(guess === targetWord) {
-                document.getElementById('status').innerText = "¡GANASTE! 🎉";
-                gameOver = true;
-                saveScore();
-            } else if(currentRow === rows - 1) {
-                document.getElementById('status').innerText = `Perdiste. Era: ${targetWord}`;
-                gameOver = true;
-                Arcade.beep(180, .3, 'sawtooth', .12);
-            } else {
-                Arcade.beep(400, .03, 'square', .05);
-                currentRow++;
-                currentTile = 0;
-                document.getElementById('status').innerText = `Intento ${currentRow + 1} de ${rows}`;
-            }
-        }
-
-        function saveScore() {
-            const score = (6 - currentRow) * 100;   // menos intentos = más puntos
-            Arcade.endRun({ score, mensaje: '🎉 ¡Adivinada! +' + score + ' pts' });
-        }
-
-        // Soporte teclado físico
         document.addEventListener('keydown', e => {
-            const key = e.key.toUpperCase();
-            if(keys.includes(key)) handleInput(key);
-            if(e.key === 'Backspace') handleInput('BACKSPACE');
-            if(e.key === 'Enter' && currentTile === cols) checkRow();
+            const k = e.key.toUpperCase();
+            if(/^[A-Z]$/.test(k)) handleInput(k);
+            else if(e.key==='Backspace') handleInput('BACKSPACE');
+            else if(e.key==='Enter') handleInput('ENTER');
         });
+
+        function submitGuess() {
+            if(currentTile<cols){ Arcade.toast('La palabra debe tener 5 letras'); return; }
+            const guess = tilesOf(currentRow).map(t=>t.innerText).join('');
+            intentosUsados++;
+            const tiles = tilesOf(currentRow);
+            const T = targetWord.split('');
+            const marks = Array(cols).fill('absent');
+            const used = Array(cols).fill(false);
+            for(let i=0;i<cols;i++) if(guess[i]===T[i]){ marks[i]='correct'; used[i]=true; }
+            for(let i=0;i<cols;i++){
+                if(marks[i]==='correct') continue;
+                for(let j=0;j<cols;j++) if(!used[j] && guess[i]===T[j]){ marks[i]='present'; used[j]=true; break; }
+            }
+            tiles.forEach((t,i)=>{ t.classList.remove('active'); t.classList.add(marks[i]); });
+            marks.forEach((m,i)=>updateKey(guess[i],m));
+            if(guess===targetWord){ win(); return; }
+            if(currentRow===rows-1){ lose(); return; }
+            currentRow++; currentTile=0;
+            document.getElementById('status').innerText = 'Intento ' + (currentRow+1) + ' de 6';
+        }
+
+        function updateKey(letter,state){
+            const key = document.getElementById('k-'+letter); if(!key) return;
+            const rank={absent:0,present:1,correct:2};
+            const cur = key.classList.contains('correct')?2:key.classList.contains('present')?1:key.classList.contains('absent')?0:-1;
+            if(rank[state]>cur){ key.classList.remove('correct','present','absent'); key.classList.add(state); }
+        }
+
+        function win(){
+            gameOver=true;
+            const base=[1000,800,650,500,400,300][intentosUsados-1]||300;
+            const score=Math.max(base-pistasUsadas*100,100);
+            Arcade.beep(880,.1,'triangle',.15); setTimeout(()=>Arcade.beep(1100,.1,'triangle',.15),110); setTimeout(()=>Arcade.beep(1500,.2,'triangle',.15),220);
+            Arcade.endRun({ score: score, mensaje: '\uD83C\uDF89 \u00A1' + targetWord + '! +' + score + ' pts (' + intentosUsados + ' intentos, ' + pistasUsadas + ' pistas)' });
+            document.getElementById('status').innerText = '\u2705 \u00A1Correcto! +' + score + ' pts';
+            setTimeout(initGame, 2600);
+        }
+        function lose(){
+            gameOver=true;
+            Arcade.beep(200,.3,'sawtooth',.15);
+            document.getElementById('status').innerText = '\u274C Era ' + targetWord + ' \u2014 nueva partida...';
+            setTimeout(initGame, 2600);
+        }
 
         initGame();
     </script>
