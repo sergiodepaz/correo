@@ -146,6 +146,7 @@
                     <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="20" alt="G">
                     Continuar con Google
                 </button>
+                <p id="login-status" style="color:#888; margin-top:14px; font-size:.85rem;">Conectando de forma segura…</p>
             </div>
         </div>
     </div>
@@ -179,6 +180,12 @@
 </div>
 
 <script type="module">
+    // Si el módulo de login falla (red/soporte), mostramos igualmente la pantalla de acceso
+    window.__hubFailTimer = setTimeout(() => {
+        const t = document.getElementById('login-status');
+        if (t) t.textContent = 'Conexión lenta… revisa tu internet e inténtalo otra vez.';
+    }, 8000);
+
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
@@ -210,6 +217,9 @@
     window.logout = () => signOut(auth);
 
     onAuthStateChanged(auth, (user) => {
+        clearTimeout(window.__hubFailTimer);
+        const st = document.getElementById('login-status');
+        if (st) st.textContent = '';
         if (user) {
             document.getElementById('screen-login').classList.remove('active');
             document.getElementById('main-app').style.display = 'block';

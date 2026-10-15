@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Penaltis NeonFOOT - Sergio's Arcade</title>
+<link rel="stylesheet" href="arcade.css">
+<style>
+  .scoreboard {
+    display:flex; gap:18px; align-items:center; justify-content:center;
+    background:#111a2e; border:3px solid #ffd700; border-radius:14px;
+    padding:10px 22px; margin-bottom:12px; font-family:'Courier New',monospace;
+    box-shadow:0 0 18px rgba(255,215,0,.25);
+  }
+  .scoreboard .home,.scoreboard .away { font-size:1rem; color:#cfd6ff; letter-spacing:1px; }
+  .scoreboard .pts { font-size:2rem; font-weight:800; color:#ffd700; min-width:64px; text-align:center; text-shadow:0 0 12px rgba(255,215,0,.6); }
+  .dots { display:flex; gap:8px; }
+  .dot { width:16px; height:16px; border-radius:50%; background:#223055; border:2px solid #3a4a7a; }
+  .dot.ok { background:#2eff6e; border-color:#2eff6e; box-shadow:0 0 10px #2eff6e; }
+  .dot.no { background:#ff4d6d; border-color:#ff4d6d; box-shadow:0 0 10px #ff4d6d; }
+  #msg { min-height:26px; font-weight:800; letter-spacing:1px; color:#00f2fe; text-shadow:0 0 12px rgba(0,242,254,.5); }
+  canvas { cursor:crosshair; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hud">
+    <span>PUNTOS<b id="hudScore">0</b></span>
+    <span>TIRADA<b id="hudRound">1/5</b></span>
+  </div>
+  <div class="scoreboard">
+    <div class="home">NEONFOOT</div>
+    <div class="pts"><span id="sbPts">0</span> : <span id="sbGoles">0</span></div>
+    <div class="away">GOLES</div>
+    <div class="dots" id="dots"></div>
+  </div>
+  <div id="msg">Mira el movimiento del portero… ¡y tira donde veas hueco! 🥅</div>
+  <canvas id="game" width="480" height="420"></canvas>
+  <div class="overlay" id="overlay">
+    <h2>⚽ PENALTIS NEONFOOT</h2>
+    <p>El portero muestra su estilo antes de cada tiro: <b>rápido</b>, <b>fintador</b> o <b>perezoso</b>.
+       Haz clic en la portería para chutar. 5 penaltis por tanda. Gol = +20 pts, palo/salida = pierdes.</p>
+    <button class="btn-neon" id="startBtn">▶ EMPEZAR TANDA</button>
+  </div>
+  <a class="back" href="juegos.html">← Volver al Menú</a>
+</div>
+
+<script src="arcade-lib.js"></script>
+<script>
+const cv = document.getElementById('game'), ctx = cv.getContext('2d');
+const W = cv.width, H = cv.height;
+// Portería
+const GX = 90, GY = 40, GW = 300, GH = 150;
+const BALL = { x: W/2, y: H - 60, r: 14 };
+
+const styles = [
+  { name:'RÁPIDO 🦅',  speed: 5.2, fake: 0 },
+  { name:'FINTADOR 🎭', speed: 3.6, fake: 1 },
+  { name:'PEREZOSO 🐢', speed: 2.4, fake: 0 },
+];
+
+let running=false, score=0, round=0, results=[], phase='idle';
+let keeper={x:W/2,y:GY+GH-34,w:70,h:64,vx:0,dir:1,target:0,faked:false,style:styles[0]};
+let shot=null, animT=0, lastTs=0;
+
+const $ = id => document.getElementById(id);
+function updateHud(){ $('hudScore').textContent=score; $('hudRound').textContent=(Math.min(round+1,5))+'/5';
+  $('sbPts').textContent=score; $('sbGoles').textContent=results.filter(r=>r).length;
+  $('dots').innerHTML=[0,1,2,3,4].map(i=>{
+    const r=results[i]; return `<div class="dot ${r===undefined?'':r?'ok':'no'}"></div>`; }).join('');
+}
+function msg(t){ $('msg').textContent=t; }
+
+function newKick(){
+  round++; if(round>5){ endRonda(); return; }
+  phase='wait';
+  keeper.style = styles[Math.floor(Math.random()*styles.length)];
+  keeper.x=W/2; keeper.vx=0; keeper.dir=Math.random()<.5?-1:1; keeper.faked=false;
+  keeper.target = (GX+40) + Math.random()*(GW-80);
+  msg(`Portero ${keeper.name}: observa a dónde se inclina…`);
+  updateHud();
+}
+
+function shoot(px,py){
+  if(phase!=='wait'||!running) return;
+  // ¿fuera? (tiro fuera del marco cuenta como fallo)
+  const inside = px>GX+6 && px<GX+GW-6 && py>GY+6 && py<GY+GH-6;
+  shot={x:BALL.x,y:BALL.y,tx:Math.max(GX,Math.min(GX+GW,px)),ty:Math.max(GY,Math.min(GY+GH,py)),inside,t:0};
+  phase='shoot';
+  // El portero reacciona: decide lado hacia donde ya se movía (con ventaja según estilo)
+  const bias = keeper.style.speed/8; // más rápido = llega mejor
+  let diveTo = keeper.x + (keeper.target - keeper.x)*bias*1.6;
+  keeper.diveTarget = Math.max(GX+keeper.w/2, Math.min(GX+GW-keeper.w/2, diveTo));
+  Arcade.beep(660,.06,'square',.08);
+}
+
+function loop(ts){
+  if(!running) return;
+  const dt = Math.min(50, ts-lastTs)||16; lastTs=ts;
+  if(!Arcade.isPaused()){ step(dt/1000); draw(); }
+  requestAnimationFrame(loop);
+}
+
+function step(dt){
+  if(phase==='wait'){
+    // patrón de vaivén del portero (telegrafía)
+    const sp = keeper.style.speed;
+    keeper.x += keeper.dir*sp*60*dt;
+    if(keeper.x<GX+keeper.w/2+4){keeper.x=GX+keeper.w/2+4;keeper.dir=1;}
+    if(keeper.x>GX+GW-keeper.w/2-4){keeper.x=GX+GW-keeper.w/2-4;keeper.dir=-1;}
+    if(keeper.style.fake && !keeper.faked && Math.random()<dt*0.7){ // fintador: cambia de bando de golpe
+      keeper.dir*=-1; keeper.faked=true; Arcade.beep(300,.05,'sawtooth',.05);
+    }
+  } else if(phase==='shoot' && shot){
+    shot.t += dt*2.4;
+    const t=Math.min(1,shot.t);
+    shot.x = shot.x+(shot.tx-shot.x)*Math.min(1,dt*9);
+    shot.y = shot.y+(shot.ty-shot.y)*Math.min(1,dt*9);
+    keeper.x += (keeper.diveTarget-keeper.x)*Math.min(1,dt*4.5);
+    if(Math.abs(shot.x-shot.tx)<6 && Math.abs(shot.y-shot.ty)<6 || t>=1){ resolveShot(); }
+  } else if(phase==='done'){
+    animT+=dt; if(animT>1.1){ phase='idle'; newKick(); }
+  }
+}
+
+function resolveShot(){
+  const s=shot; phase='done'; animT=0;
+  if(!s.inside){ fail('¡FUERA! 😱 Se fue lejos del marco'); return; }
+  // poste (frío): cerca del palo superior/lateral
+  const nearPost = Math.abs(s.tx-GX)<14||Math.abs(s.tx-(GX+GW))<14||Math.abs(s.ty-GY)<12;
+  if(nearPost && Math.random()<.5){ fail('¡AL PALO! 🥎 Rebota y fuera'); return; }
+  const dx=Math.abs(s.tx-keeper.x), dy=Math.abs(s.ty-(keeper.y-6));
+  if(dx<keeper.w/2+10 && dy<keeper.h/2+16){ fail('¡PARADA! 🧤 El portero llegó'); return; }
+  goal('¡GOOOOOL! ⚽🔥');
+}
+function goal(t){ msg(t); score+=20; results.push(true); Arcade.beep(880,.1,'triangle',.1); setTimeout(()=>Arcade.beep(1174,.14,'triangle',.1),110); celebrate(false); }
+function fail(t){ msg(t); results.push(false); Arcade.beep(180,.2,'sawtooth',.09); }
+function celebrate(){ /* overlay propio no hace falta */ }
+
+function endRonda(){
+  running=false; phase='idle';
+  Arcade.addScore(score);
+  const ov=$('overlay'); ov.style.display='flex';
+  ov.querySelector('h2').textContent=`FINAL: ${results.filter(r=>r).length}/5 GOLES`;
+  ov.querySelector('p').innerHTML=`Has sumado <b style="color:#ffd700">${score}</b> puntos en esta tanda.<br>¿Otra ronda? Los porteros tienen memoria corta.`;
+  ov.querySelector('button').textContent='▶ NUEVA TANDA';
+  msg('¡Tanda terminada!');
+}
+
+function draw(){
+  // campo
+  ctx.clearRect(0,0,W,H);
+  const g=ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,'#0b1437'); g.addColorStop(.45,'#0e1c4a'); g.addColorStop(1,'#123a1e');
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+  // césped con franjas
+  for(let i=0;i<6;i++){ ctx.fillStyle=i%2?'rgba(46,204,113,.10)':'rgba(46,204,113,.05)'; ctx.fillRect(0,GY+GH+i*30,W,30); }
+  // área
+  ctx.strokeStyle='rgba(255,255,255,.5)'; ctx.lineWidth=2;
+  ctx.strokeRect(W/2-160,GY+GH,320,120); ctx.strokeRect(W/2-70,GY+GH,140,50);
+  ctx.beginPath(); ctx.arc(W/2,GY+GH+120,42,Math.PI,0,true); ctx.stroke();
+  // punto de penalti
+  ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(BALL.x,BALL.y-2,3,0,7); ctx.fill();
+  // portería neón
+  ctx.shadowColor='#00f2fe'; ctx.shadowBlur=14;
+  ctx.strokeStyle='#eaffff'; ctx.lineWidth=5;
+  ctx.beginPath(); ctx.moveTo(GX,GY+GH); ctx.lineTo(GX,GY); ctx.lineTo(GX+GW,GY); ctx.lineTo(GX+GW,GY+GH); ctx.stroke();
+  ctx.shadowBlur=0;
+  // red
+  ctx.strokeStyle='rgba(255,255,255,.14)'; ctx.lineWidth=1;
+  for(let x=GX;x<=GX+GW;x+=18){ ctx.beginPath(); ctx.moveTo(x,GY); ctx.lineTo(x,GY+GH); ctx.stroke(); }
+  for(let y=GY;y<=GY+GH;y+=18){ ctx.beginPath(); ctx.moveTo(GX,y); ctx.lineTo(GX+GW,y); ctx.stroke(); }
+  // publico (pixeles)
+  for(let i=0;i<70;i++){ const x=(i*73)%W, y=6+((i*29)%22);
+    ctx.fillStyle=`hsl(${(i*47)%360},70%,${45+((i*13)%20)}%)`; ctx.fillRect(x,y,4,4); }
+  // portero
+  ctx.save(); ctx.translate(keeper.x,keeper.y);
+  const lean=Math.max(-1,Math.min(1,(keeper.diveTarget!==undefined&&phase==='shoot')?(keeper.diveTarget-keeper.x)/80:(keeper.dir*.2)));
+  ctx.rotate(lean*.5);
+  ctx.fillStyle='#ffb300'; ctx.fillRect(-12,-30,24,34);           // camiseta
+  ctx.fillStyle='#1b2a4a'; ctx.fillRect(-12,4,24,16);             // short
+  ctx.fillStyle='#ffe0b2'; ctx.beginPath(); ctx.arc(0,-38,10,0,7); ctx.fill(); // cabeza
+  ctx.fillStyle='#ff5252';                                        // guantes
+  ctx.fillRect(-30,-24,12,10); ctx.fillRect(18,-24,12,10);
+  ctx.fillRect(-34,-6,10,8);   ctx.fillRect(24,-6,10,8);
+  ctx.restore();
+  // balón
+  const bx=shot?shot.x:BALL.x, by=shot?shot.y:BALL.y;
+  const scale=shot?1-Math.min(.5,shot.t*.45):1;
+  ctx.save(); ctx.translate(bx,by); ctx.scale(scale,scale);
+  ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(0,0,BALL.r,0,7); ctx.fill();
+  ctx.fillStyle='#111';
+  [[0,0],[9,4],[-8,5],[3,-9],[-6,-7]].forEach(p=>{ctx.beginPath();ctx.arc(p[0],p[1],3,0,7);ctx.fill();});
+  ctx.restore();
+}
+
+$('startBtn').addEventListener('click',()=>{
+  $('overlay').style.display='none'; running=true; score=0; round=0; results=[];
+  updateHud(); newKick(); Arcade.resumeIfPaused(); requestAnimationFrame(t=>loop(t));
+});
+cv.addEventListener('pointerdown',e=>{
+  const r=cv.getBoundingClientRect();
+  shoot((e.clientX-r.left)*(W/r.width),(e.clientY-r.top)*(H/r.height));
+});
+updateHud();
+</script>
+</body>
+</html>

@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Laberinto del Fútbol - Sergio's Arcade</title>
+<link rel="stylesheet" href="arcade.css">
+<style>
+  #msg { min-height:24px; font-weight:800; color:#ffd700; letter-spacing:1px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hud">
+    <span>NIVEL<b id="hudLvl">1</b></span>
+    <span>PUNTOS<b id="hudScore">0</b></span>
+    <span>TIEMPO<b id="hudTime">0s</b></span>
+  </div>
+  <div id="msg">⚽ Lleva el balón hasta la portería 🥅 esquivando defensas 🔴</div>
+  <canvas id="game" width="480" height="480"></canvas>
+  <p style="color:#b0b0d0;font-size:.85rem;margin-top:10px;">Flechas / WASD o desliza el dedo en móvil</p>
+  <div class="overlay" id="overlay">
+    <h2>🏟️ LABERINTO DEL FÚTBOL</h2>
+    <p>Recorre el laberinto con el balón hasta la portería. Cuidado: los defensas patrullan los pasillos. Cada nivel añade más defensas y laberintos más grandes.</p>
+    <button class="btn-neon" id="startBtn">▶ SALTAR AL CAMPO</button>
+  </div>
+  <a class="back" href="juegos.html">← Volver al Menú</a>
+</div>
+
+<script src="arcade-lib.js"></script>
+<script>
+const cv=document.getElementById('game'),ctx=cv.getContext('2d');
+const $=id=>document.getElementById(id);
+let N=11, CELL=40; // N impar
+let grid=[], ball={cx:1,cy:1}, goalCell={cx:0,cy:0}, defenders=[], level=1, score=0;
+let running=false, dead=false, t0=0, lastTs=0, keys={}, touchDir=null;
+
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+
+function genMaze(){
+  // backtracker sobre rejilla impar
+  N = Math.min(21, 9 + (level-1)*2);
+  CELL = Math.floor(460/N);
+  cv.width = cv.height = N*CELL;
+  grid = Array.from({length:N},()=>Array(N).fill(1));
+  const stack=[[1,1]]; grid[1][1]=0;
+  while(stack.length){
+    const [x,y]=stack[stack.length-1];
+    const opts=shuffle([[2,0],[-2,0],[0,2],[0,-2]])
+      .map(d=>[x+d[0],y+d[1],d])
+      .filter(p=>p[0]>0&&p[1]>0&&p[0]<N-1&&p[1]<N-1&&grid[p[1]][p[0]]===1);
+    if(!opts.length){stack.pop();continue;}
+    const [nx,ny,d]=opts[0];
+    grid[y+d[1]/2][x+d[0]/2]=0; grid[ny][nx]=0; stack.push([nx,ny]);
+  }
+  // bucles extra para que sea menos lineal
+  for(let i=0;i<N;i++){
+    const x=1+2*Math.floor(Math.random()*((N-1)/2)), y=2*Math.floor(Math.random()*((N-1)/2))+2;
+    if(y<N-1&&x<N) grid[y][x]=0;
+    const x2=2*Math.floor(Math.random()*((N-1)/2))+2, y2=1+2*Math.floor(Math.random()*((N-1)/2));
+    if(x2<N&&y2<N) grid[y2][x2]=0;
+  }
+  ball={cx:1,cy:1};
+  goalCell={cx:N-2,cy:N-2};
+  // defensas en celdas libres lejos del inicio
+  defenders=[];
+  const count=Math.min(3+level,10);
+  let guard=0;
+  while(defenders.length<count&&guard++<500){
+    const x=Math.floor(Math.random()*N),y=Math.floor(Math.random()*N);
+    if(grid[y][x]!==0) continue;
+    if(Math.abs(x-1)+Math.abs(y-1)<4) continue;
+    if(x===goalCell.cx&&y===goalCell.cy) continue;
+    if(defenders.some(d=>d.cx===x&&d.cy===y)) continue;
+    const dirs=freeDirs(x,y);
+    if(dirs.length<2) continue;
+    const d=dirs[Math.floor(Math.random()*dirs.length)];
+    defenders.push({cx:x,cy:y,dx:d[0],dy:d[1],speed:1.1+Math.random()*.8+level*.06,px:x,py:y,prog:0});
+  }
+}
+function freeDirs(x,y){
+  return [[1,0],[-1,0],[0,1],[0,-1]].filter(d=>grid[y+d[1]]&&grid[y+d[1]][x+d[0]]===0);
+}
+
+function moveBall(dx,dy){
+  if(!running||dead) return;
+  const nx=ball.cx+dx, ny=ball.cy+dy;
+  if(nx<0||ny<0||nx>=N||ny>=N||grid[ny][nx]===1){ Arcade.beep(140,.05,'square',.05); return; }
+  ball.cx=nx; ball.cy=ny;
+  Arcade.beep(520,.03,'triangle',.05);
+  checkHit(true);
+  if(ball.cx===goalCell.cx&&ball.cy===goalCell.cy) winLevel();
+}
+
+function step(dt){
+  for(const d of defenders){
+    d.prog += d.speed*dt;
+    while(d.prog>=1){
+      d.prog-=1; d.cx=d.px; d.cy=d.py;
+      const opts=freeDirs(d.cx,d.cy);
+      const fwd=[d.dx,d.dy], back=[-d.dx,-d.dy];
+      let pick;
+      if(opts.some(o=>o[0]===fwd[0]&&o[1]===fwd[1]) && Math.random()<.8) pick=fwd;
+      else { const cand=opts.filter(o=>!(o[0]===back[0]&&o[1]===back[1])); pick=(cand.length?cand:opts)[Math.floor(Math.random()*(cand.length?cand.length:opts.length))]||fwd; }
+      d.dx=pick[0]; d.dy=pick[1]; d.px=d.cx+d.dx; d.py=d.cy+d.dy;
+      if(grid[d.py]===undefined||grid[d.py][d.px]===1){ d.px=d.cx; d.py=d.cy; }
+    }
+  }
+  checkHit(false);
+}
+function checkHit(strict){
+  for(const d of defenders){
+    const rx=d.px+(d.cx-d.px)*(1-Math.min(1,d.prog)), ry=d.py+(d.cy-d.py)*(1-Math.min(1,d.prog));
+    const dist=Math.hypot(rx-ball.cx,ry-ball.cy);
+    if(dist < (strict?0.55:0.45)){ die(); return; }
+  }
+}
+function die(){
+  dead=true; running=false;
+  Arcade.beep(200,.3,'sawtooth',.1); setTimeout(()=>Arcade.beep(140,.35,'sawtooth',.1),160);
+  const secs=Math.round((performance.now()-t0)/1000);
+  Arcade.addScore(score);
+  const ov=$('overlay'); ov.style.display='flex';
+  ov.querySelector('h2').textContent='🟥 TARJETA ROJA';
+  ov.querySelector('p').innerHTML=`Un defensa te robó el balón en el nivel ${level}.<br>Puntuación: <b style="color:#ffd700">${score}</b> pts · ${secs}s en campo.`;
+  ov.querySelector('button').textContent='▶ VOLVER A JUGAR';
+}
+function winLevel(){
+  const secs=Math.max(1,Math.round((performance.now()-t0)/1000));
+  const bonus=Math.max(0,60-secs)*2;
+  score+=100+bonus+level*10;
+  $('hudScore').textContent=score;
+  Arcade.beep(880,.08,'triangle',.1); setTimeout(()=>Arcade.beep(1174,.12,'triangle',.1),90);
+  level++; startLevel();
+  $('msg').textContent=`¡GOL! ⚽ +${100+bonus} pts → Nivel ${level}`;
+}
+function startLevel(){
+  genMaze(); t0=performance.now(); dead=false; running=true;
+  $('hudLvl').textContent=level;
+}
+function draw(){
+  ctx.clearRect(0,0,cv.width,cv.height);
+  // césped
+  for(let y=0;y<N;y++)for(let x=0;x<N;x++){
+    if(grid[y][x]===1){ ctx.fillStyle=((x+y)%2)?'#14532d':'#166534'; ctx.fillRect(x*CELL,y*CELL,CELL,CELL);
+      ctx.strokeStyle='rgba(0,0,0,.25)'; ctx.strokeRect(x*CELL+.5,y*CELL+.5,CELL-1,CELL-1); }
+    else { ctx.fillStyle='#0c3a1e'; ctx.fillRect(x*CELL,y*CELL,CELL,CELL); }
+  }
+  // portería
+  const gx=goalCell.cx*CELL, gy=goalCell.cy*CELL;
+  ctx.fillStyle='rgba(255,255,255,.9)';
+  ctx.fillRect(gx+2,gy+2,CELL-4,6);
+  ctx.fillStyle='#ffd700'; ctx.font=`${CELL*.6}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('🥅',gx+CELL/2,gy+CELL/2+2);
+  // defensas
+  for(const d of defenders){
+    const ix=(d.px+(d.cx-d.px)*(1-Math.min(1,d.prog)))*CELL+CELL/2;
+    const iy=(d.py+(d.cy-d.py)*(1-Math.min(1,d.prog)))*CELL+CELL/2;
+    ctx.fillStyle='#ff4d4d'; ctx.beginPath(); ctx.arc(ix,iy,CELL*.32,0,7); ctx.fill();
+    ctx.strokeStyle='#7a1020'; ctx.lineWidth=2; ctx.stroke();
+    ctx.fillStyle='#fff'; ctx.font=`${CELL*.3}px serif`; ctx.fillText('🛡',ix,iy+1);
+  }
+  // balón
+  ctx.fillStyle='#fff'; ctx.beginPath();
+  ctx.arc(ball.cx*CELL+CELL/2,ball.cy*CELL+CELL/2,CELL*.3,0,7); ctx.fill();
+  ctx.fillStyle='#111';
+  ctx.beginPath(); ctx.arc(ball.cx*CELL+CELL/2,ball.cy*CELL+CELL/2,CELL*.1,0,7); ctx.fill();
+}
+function loop(ts){
+  if(!running&&!dead) requestAnimationFrame(loop);
+  const dt=Math.min(.05,(ts-lastTs)/1000)||0; lastTs=ts;
+  if(running&&!dead){ step(dt); if(!Arcade.isPaused()) $('hudTime').textContent=Math.round((performance.now()-t0)/1000)+'s'; }
+  draw();
+  if(running) requestAnimationFrame(loop);
+}
+
+// teclado
+addEventListener('keydown',e=>{
+  const k=e.key.toLowerCase();
+  if(['arrowup','w'].includes(k)&&!keys.up){keys.up=1;moveBall(0,-1);}
+  if(['arrowdown','s'].includes(k)&&!keys.down){keys.down=1;moveBall(0,1);}
+  if(['arrowleft','a'].includes(k)&&!keys.left){keys.left=1;moveBall(-1,0);}
+  if(['arrowright','d'].includes(k)&&!keys.right){keys.right=1;moveBall(1,0);}
+  if(e.key.startsWith('Arrow')) e.preventDefault();
+});
+addEventListener('keyup',e=>{const k=e.key.toLowerCase();
+  if(['arrowup','w'].includes(k))keys.up=0; if(['arrowdown','s'].includes(k))keys.down=0;
+  if(['arrowleft','a'].includes(k))keys.left=0; if(['arrowright','d'].includes(k))keys.right=0;});
+// táctil (deslizar)
+let sx,sy;
+cv.addEventListener('touchstart',e=>{sx=e.touches[0].clientX;sy=e.touches[0].clientY;},{passive:true});
+cv.addEventListener('touchend',e=>{
+  const dx=e.changedTouches[0].clientX-sx, dy=e.changedTouches[0].clientY-sy;
+  if(Math.abs(dx)>Math.abs(dy)){ if(Math.abs(dx)>18) moveBall(dx>0?1:-1,0); }
+  else { if(Math.abs(dy)>18) moveBall(0,dy>0?1:-1); }
+},{passive:true});
+
+$('startBtn').addEventListener('click',()=>{
+  $('overlay').style.display='none';
+  level=1; score=0; $('hudScore').textContent=0; $('msg').textContent='⚽ ¡Rumba la portería!';
+  startLevel(); lastTs=performance.now(); requestAnimationFrame(loop);
+});
+genMaze(); draw();
+</script>
+</body>
+</html>

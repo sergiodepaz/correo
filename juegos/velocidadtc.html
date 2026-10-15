@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Velocidad de Teclado - Sergio's Arcade</title>
+<link rel="stylesheet" href="arcade.css">
+<style>
+  #frase{width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);
+    border-radius:14px;padding:18px;font-size:1.3rem;line-height:1.7;letter-spacing:.5px;min-height:90px;}
+  #frase .ok{color:#2eff6e;} #frase .bad{color:#ff4d6d;background:rgba(255,77,109,.15);border-radius:4px;}
+  #frase .cur{background:rgba(0,242,254,.25);border-bottom:2px solid #00f2fe;}
+  #escritura{width:100%;margin-top:14px;padding:14px;border-radius:12px;border:1px solid rgba(255,255,255,.2);
+    background:rgba(0,0,0,.35);color:#fff;font-size:1.15rem;outline:none;font-family:inherit;}
+  #escritura:focus{border-color:#00f2fe;box-shadow:0 0 14px rgba(0,242,254,.3);}
+  #msg{min-height:26px;font-weight:800;color:#ffd700;letter-spacing:1px;margin-top:10px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hud">
+    <span>PPM<b id="hudWpm">0</b></span>
+    <span>PRECISIÓN<b id="hudAcc">100%</b></span>
+    <span>PUNTOS<b id="hudScore">0</b></span>
+  </div>
+  <p style="color:#b0b0d0;margin-bottom:10px;">Escribe la frase exacta (60 segundos · cada frase = puntos)</p>
+  <div id="frase"></div>
+  <input id="escritura" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Empieza a escribir aquí…">
+  <div id="msg"></div>
+  <div class="overlay" id="overlay">
+    <h2>⌨️ VELOCIDAD DE TECLADO</h2>
+    <p>Tienes <b>60 segundos</b>. Escribe tantas frases como puedas sin errores: las erratas te restan precisión y tiempo. PPM = palabras por minuto.</p>
+    <button class="btn-neon" id="startBtn">▶ EMPEZAR CARRERA</button>
+  </div>
+  <a class="back" href="juegos.html">← Volver al Menú</a>
+</div>
+
+<script src="arcade-lib.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const frases=[
+ "el gato subio al tejado azul","corre que el autobus espera","nueve dias sin ver la tele",
+ "la pizza sabe mejor con orégano","mi teclado vuela sobre la mesa","cinco pelotas roten en el patio",
+ "el arcade guarda mis mejores records","mananas de cafe y partidas rapidas","saltar el charco con estilo propio",
+ "los neones iluminan la madrugada","quien mucho abarca poco aprieta","el tetris encaja cuando menos lo esperas",
+ "una partida mas y lo dejo","ganar al portero no es cuestion de suerte","la quiniela se gana con cabeza",
+ "dormir es para los que no tienen records","hoy el laberinto esta mojado","pac-man se comio las llaves del sofa",
+ "las palomas saben mas que wikipédia","velocidad sin precision es solo ruido","releo la frase y vuelvo a fallar",
+ "el sudoku me mira y yo lo miro","tres en linea y sigo pensando","conecta cuatro y me desconecto yo"
+];
+let pool=[], current='', typedIdx=0, total=0, errs=0, score=0, timeLeft=60, timer=null, running=false, tStart=0;
+
+function nextFrase(){
+  if(!pool.length) pool=[...frases].sort(()=>Math.random()-.5);
+  current=pool.pop(); typedIdx=0; render();
+}
+function render(){
+  const f=$('frase'); let html='';
+  for(let i=0;i<current.length;i++){
+    const ch=current[i];
+    let cls='';
+    if(i<typedIdx) cls=(f.dataset['k'+i]==='1')?'ok':'bad';
+    else if(i===typedIdx) cls='cur';
+    html+=`<span class="${cls}" ${i===typedIdx?'id="cursor"':''}>${ch===' '?'&nbsp;':ch}</span>`;
+  }
+  f.innerHTML=html;
+}
+$('escritura').addEventListener('keydown',e=>{
+  if(!running)return;
+  if(e.key.length!==1&&e.key!==' ')return;
+  const want=current[typedIdx];
+  const got=e.key;
+  total++;
+  if(got===want){ $('frase').dataset['k'+typedIdx]='1'; typedIdx++; Arcade.beep(600+typedIdx*8,.02,'triangle',.04); }
+  else { errs++; $('frase').dataset['k'+typedIdx]='0'; Arcade.beep(160,.05,'square',.06); e.preventDefault(); }
+  if(typedIdx>=current.length) finishFrase();
+  updateHud(); render();
+});
+// borrar hacia atrás no se permite: castiga releer (más arcade, más tensión)
+$('escritura').addEventListener('keydown',e=>{ if(e.key==='Backspace'||e.key==='Tab') e.preventDefault(); });
+$('escritura').addEventListener('input',()=>{ $('escritura').value=''; });
+
+function finishFrase(){
+  const accNow=Math.round((1-errs/total)*100);
+  const pts=Math.max(5,Math.round(current.length*(accNow/100)*2));
+  score+=pts;
+  $('msg').textContent=`✅ +${pts} pts`;
+  Arcade.beep(880,.07,'triangle',.1); setTimeout(()=>Arcade.beep(1174,.1,'triangle',.1),80);
+  nextFrase(); updateHud();
+}
+function updateHud(){
+  const mins=(performance.now()-tStart)/60000;
+  const wpm=mins>0?Math.round((total/5)/Math.max(mins,1/60)):0;
+  $('hudWpm').textContent=wpm;
+  $('hudAcc').textContent=(total?Math.max(0,Math.round((1-errs/total)*100)):100)+'%';
+  $('hudScore').textContent=score;
+}
+function startGame(){
+  $('overlay').style.display='none';
+  pool=[];total=0;errs=0;score=0;timeLeft=60;running=true;tStart=performance.now();
+  $('escritura').focus(); nextFrase();
+  clearInterval(timer);
+  timer=setInterval(()=>{
+    timeLeft--;
+    $('msg').textContent=timeLeft<=10?`⏰ ¡Quedan ${timeLeft}s!`:'';
+    updateHud();
+    if(timeLeft<=0) endGame();
+  },1000);
+}
+function endGame(){
+  running=false; clearInterval(timer);
+  const mins=(performance.now()-tStart)/60000;
+  const wpm=Math.round((total/5)/Math.max(mins,1/60));
+  Arcade.addScore(score);
+  const ov=$('overlay'); ov.style.display='flex';
+  ov.querySelector('h2').textContent=`${wpm} PPM`;
+  ov.querySelector('p').innerHTML=`Frases completadas y <b style="color:#ffd700">${score}</b> pts.<br>
+     Precisión final: ${Math.max(0,Math.round((1-errs/Math.max(1,total))*100))}% — un dedo firme vale oro.`;
+  ov.querySelector('button').textContent='▶ OTRA CARRERA';
+}
+$('startBtn').addEventListener('click',startGame);
+nextFrase();
+</script>
+</body>
+</html>

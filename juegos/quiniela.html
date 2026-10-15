@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quiniela Express - Sergio's Arcade</title>
+<link rel="stylesheet" href="arcade.css">
+<style>
+  .match { width:100%; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.12);
+    border-radius:16px; padding:18px; margin-bottom:14px; }
+  .teams { display:flex; align-items:center; justify-content:center; gap:14px; font-size:1.15rem; font-weight:800; }
+  .teams .vs { color:#b0b0d0; font-size:.9rem; }
+  .stats { display:flex; justify-content:center; gap:18px; color:#b0b0d0; font-size:.85rem; margin:10px 0 14px; }
+  .stats b { color:#00f2fe; }
+  .pick-row { display:flex; gap:10px; justify-content:center; }
+  .pick { flex:1; max-width:110px; padding:12px 0; border-radius:12px; border:1px solid rgba(255,255,255,.2);
+    background:rgba(255,255,255,.07); color:#fff; font-weight:800; font-size:1rem; cursor:pointer; transition:.2s; font-family:inherit; }
+  .pick:hover { border-color:#ffd700; transform:translateY(-2px); }
+  .pick:disabled { opacity:.4; cursor:default; transform:none; }
+  #feedback { min-height:30px; font-weight:800; letter-spacing:1px; text-align:center; margin:6px 0; }
+  #feedback.ok{color:#2eff6e;} #feedback.no{color:#ff4d6d;}
+  .lives { font-size:1.2rem; letter-spacing:3px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hud">
+    <span>ACIERTOS<b id="hudOk">0</b></span>
+    <span>JORNADA<b id="hudRnd">1</b></span>
+    <span class="lives" id="hudLives">❤️❤️❤️</span>
+  </div>
+
+  <div class="match" id="card">
+    <div class="teams"><span id="home">—</span><span class="vs">VS</span><span id="away">—</span></div>
+    <div class="stats">
+      <span>Local <b id="stH">—</b></span>
+      <span>Empates <b id="stD">—</b></span>
+      <span>Visitante <b id="stA">—</b></span>
+      <span>⚽ <b id="stG">—</b></span>
+    </div>
+    <div class="pick-row">
+      <button class="pick" data-p="H">1 · LOCAL</button>
+      <button class="pick" data-p="D">X · EMPATE</button>
+      <button class="pick" data-p="A">2 · VISIT.</button>
+    </div>
+  </div>
+  <div id="feedback"></div>
+
+  <div class="overlay" id="overlay">
+    <h2>📋 QUINIELA EXPRESS</h2>
+    <p>Cada jornada muestra un partido ficticio con sus estadísticas. Predice el resultado: <b>1</b> (local), <b>X</b> (empate) o <b>2</b> (visitante). Las estadísticas no mienten… casi nunca. 3 fallos y se acaba la liga.</p>
+    <button class="btn-neon" id="startBtn">▶ COMENZAR LIGA</button>
+  </div>
+  <a class="back" href="juegos.html">← Volver al Menú</a>
+</div>
+
+<script src="arcade-lib.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const homes=['Neon FC','Galácticos United','Rayo Píxel','Atlético Bit','Real Glitch','Sporting Láser','Inter Nova','Deportivo Cometa'];
+const aways=['CD Tetris','Juventus 8-Bit','Olympique Onda','Valencia Vector','Betis Byte','Milan Mamba','Eclipse CF','Quantum Racing'];
+let ok=0,lives=3,rnd=1,score=0,pending=null,busy=false;
+
+function newMatch(){
+  const h=homes[Math.floor(Math.random()*homes.length)];
+  let a=aways[Math.floor(Math.random()*aways.length)];
+  $('home').textContent=h; $('away').textContent=a;
+  // fuerzas ocultas
+  const rh=Math.random(), rd=Math.random()<.22?Math.random():0, ra=Math.random();
+  // probabilidades reales
+  let pH=.4+rh*.35, pD=rd>.5?.24:.14, pA=Math.max(.08,1-pH-pD);
+  const s=pH+pD+pA; pH/=s;pD/=s;pA/=s;
+  pending = pH>pD&&pH>pA?'H':pD>pA?'D':'A';
+  // estadísticas "filtradas": reflejan las probabilidades con ruido
+  const fmt=p=>Math.round(p*100)+(Math.random()<.25?(Math.random()<.5?-4:4):0);
+  $('stH').textContent=Math.max(5,fmt(pH))+'%';
+  $('stD').textContent=Math.max(5,fmt(pD))+'%';
+  $('stA').textContent=Math.max(5,fmt(pA))+'%';
+  $('stG').textContent=(1+Math.floor(Math.random()*4))+'.0 goles';
+  $('feedback').textContent=''; $('feedback').className='';
+  document.querySelectorAll('.pick').forEach(b=>b.disabled=false);
+}
+
+document.querySelectorAll('.pick').forEach(btn=>btn.addEventListener('click',()=>{
+  if(busy||!pending) return; busy=true;
+  document.querySelectorAll('.pick').forEach(b=>b.disabled=true);
+  const pick=btn.dataset.p, win=pick===pending;
+  const fb=$('feedback');
+  if(win){
+    ok++; score+=30+Math.max(0,lives)*10;
+    fb.textContent=`✅ ¡ACIERTO! +${30+Math.max(0,lives)*10} pts`; fb.className='ok';
+    Arcade.beep(880,.08,'triangle',.1); setTimeout(()=>Arcade.beep(1174,.1,'triangle',.1),90);
+  } else {
+    lives--;
+    fb.textContent=`❌ FALLASTE — era ${pending==='H'?'1':pending==='D'?'X':'2'} · vidas: ${'❤️'.repeat(Math.max(0,lives))||'0'}`; fb.className='no';
+    Arcade.beep(220,.2,'sawtooth',.09);
+  }
+  $('hudOk').textContent=ok; $('hudLives').textContent='❤️'.repeat(Math.max(0,lives))||'💀';
+  rnd++; $('hudRnd').textContent=rnd;
+  setTimeout(()=>{
+    busy=false;
+    if(lives<=0) endGame(); else newMatch();
+  },1100);
+}));
+
+function endGame(){
+  score+=ok*20;
+  Arcade.addScore(score);
+  const ov=$('overlay'); ov.style.display='flex';
+  ov.querySelector('h2').textContent=`DESCENSO… ${ok} ACIERTOS`;
+  ov.querySelector('p').innerHTML=`Jornadas jugadas: ${rnd-1}. Puntuación final: <b style="color:#ffd700">${score}</b> pts.<br>La afición pide una revancha inmediata.`;
+  ov.querySelector('button').textContent='▶ NUEVA TEMPORADA';
+}
+
+$('startBtn').addEventListener('click',()=>{
+  $('overlay').style.display='none';
+  ok=0;lives=3;rnd=1;score=0;
+  $('hudOk').textContent=0;$('hudRnd').textContent=1;$('hudLives').textContent='❤️❤️❤️';
+  newMatch();
+});
+newMatch(); document.querySelectorAll('.pick').forEach(b=>b.disabled=true);
+</script>
+</body>
+</html>

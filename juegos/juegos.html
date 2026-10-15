@@ -287,6 +287,7 @@
         <button class="cat-btn" data-cat="accion">💥 Acción</button>
         <button class="cat-btn" data-cat="reflejos">⚡ Reflejos</button>
         <button class="cat-btn" data-cat="mentes">🧠 Para Mentes</button>
+        <button class="cat-btn" data-cat="deportes">⚽ Deportes</button>
         <button class="cat-btn" data-cat="caos">🤪 Caos Total</button>
         <button class="cat-btn" data-cat="clasicos">👴 Clásicos</button>
     </nav>
@@ -297,10 +298,8 @@
     </div>
 
     <div id="games-container" class="games-grid">
-        <div class="loading">
-            <div class="spinner"></div>
-            Cargando tus juegos y récords...
-        </div>
+        <!-- Las tarjetas se rellenan desde el catálogo local (instantáneo).
+             Los récords de la nube llegan después y actualizan solo las insignias. -->
     </div>
 </div>
 
@@ -355,6 +354,16 @@
         { id: 'reinas', name: '8 Reinas Locas', icon: '👑', desc: 'Coloca 8 reinas en el tablero sin que se ataquen entre sí. Pura lógica ajedrecística.', file: 'reinas.html' , cats: ['mentes'] },
         { id: 'sudoku', name: 'Sudoku Neón', icon: '🧮', desc: 'Rellena la rejilla respetando filas, columnas y bloques. Con pistas y estilo neón.', file: 'sudoku.html' , cats: ['mentes'] },
         { id: 'memoji', name: 'MEMOJI', icon: '🧠', desc: 'Memoriza emojis en pantalla y recuérdalos todos. Tu memoria puesta a prueba.', file: 'memoji.html' , cats: ['mentes','nuevos'] },
+
+        // ⚽ ZONA FÚTBOL
+        { id: 'penaltis', name: 'Penaltis NeonFOOT', icon: '🥅', desc: '5 penaltis, 3 porteros con estilos distintos y marcador de estadio. ¡Tira con efecto!', file: 'penaltis.html' , cats: ['deportes','reflejos','nuevos'] },
+        { id: 'futlaberinto', name: 'Laberinto del Fútbol', icon: '🏟️', desc: 'Guía el balón por el laberinto hasta la portería esquivando defensas. Con niveles infinitos.', file: 'futlaberinto.html' , cats: ['deportes','mentes','nuevos'] },
+        { id: 'quiniela', name: 'Quiniela Express', icon: '📋', desc: 'Acierta el resultado (1/X/2) de cada partido usando las estadísticas. ¿Cuántas jornadas aguantas?', file: 'quiniela.html' , cats: ['deportes','mentes','nuevos'] },
+        { id: 'regate', name: 'Regate Infinito', icon: '⛹️', desc: 'Conduce el balón esquivando defensas que caen sobre el campo. Cada regate suma puntos.', file: 'regate.html' , cats: ['deportes','reflejos','accion','nuevos'] },
+
+        // 🆕 Otros juegos nuevos
+        { id: 'memecolor', name: 'Memoria de Colores', icon: '🎨', desc: 'Memoriza la rejilla de colores antes de que se apague y reprodúcela exacta. Niveles crecientes.', file: 'memecolor.html' , cats: ['mentes','nuevos'] },
+        { id: 'velocidadtc', name: 'Velocidad de Teclado', icon: '⌨️', desc: 'Escribe las frases que aparecen lo más rápido posible. Mide tus palabras por minuto.', file: 'velocidadtc.html' , cats: ['reflejos','nuevos'] },
     ];
 
     let currentUser = null;
@@ -367,9 +376,30 @@
         accion:   { label: '💥 Acción' },
         reflejos: { label: '⚡ Reflejos' },
         mentes:   { label: '🧠 Para Mentes' },
+        deportes: { label: '⚽ Deportes' },
         caos:     { label: '🤪 Caos Total' },
         clasicos: { label: '👴 Clásicos' },
     };
+
+    // Récords locales (inmediatos, sin esperar a la nube) por si el usuario
+    // juega en este dispositivo con arcade-lib.js
+    function localRecords() {
+        const uid = localStorage.getItem('arcade_uid');
+        uid && localStorage.setItem('arcade_uid_last', uid); // último uid conocido
+        const lookupUid = uid || localStorage.getItem('arcade_uid_last');
+        const map = {};
+        try {
+            for (let i = 0; i < localStorage.length; i++) {
+                const k = localStorage.key(i);
+                if (!k || !k.startsWith('rec_')) continue;
+                if (lookupUid && !(k === 'rec_' + lookupUid || k.startsWith('rec_' + lookupUid + '_'))) continue;
+                const gid = k.replace(/^rec_(?:anon|[A-Za-z0-9_-]+?)_/, '');
+                const v = +(JSON.parse(localStorage.getItem(k)) || 0);
+                if (gid && v > (map[gid] || 0)) map[gid] = v;
+            }
+        } catch (e) {}
+        return map;
+    }
 
     // Normaliza texto: minúsculas y sin tildes (buscar "memoria" encuentra "Memoria Flash")
     const normalize = str => (str || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -380,27 +410,44 @@
             return;
         }
         currentUser = user;
-        await renderGames();
+        // 1) Pintar las tarjetas YA (catálogo local + récords locales): carga instantánea
+        renderGames(localRecords());
         setupMenuAndSearch();
+        // 2) En segundo plano, traer los récords de la nube y actualizar solo las insignias
+        fetchCloudScores();
     });
 
-    async function renderGames() {
-        const container = document.getElementById('games-container');
-        container.innerHTML = '';
-
-        // Obtener récords del usuario actual
+    async function fetchCloudScores() {
         const scoresMap = {};
         try {
             const q = query(collection(db, "scores"), where("userId", "==", currentUser.uid));
             const snapshot = await getDocs(q);
             snapshot.forEach(doc => {
                 const data = doc.data();
-                // Guardar solo la puntuación más alta por juego
                 if (!scoresMap[data.gameId] || data.score > scoresMap[data.gameId]) {
                     scoresMap[data.gameId] = data.score;
                 }
             });
         } catch (e) { console.log("No hay récords aún"); }
+        updateScoreBadges(scoresMap);
+    }
+
+    // Actualiza únicamente las insignias 🏆 sin re-pintar el grid (rápido)
+    function updateScoreBadges(scoresMap) {
+        document.querySelectorAll('#games-container .game-card').forEach(card => {
+            const id = card.dataset.id;
+            const badge = card.querySelector('.score-badge');
+            if (!badge || !id) return;
+            const key = 'rec_' + (currentUser ? currentUser.uid : 'anon') + '_' + id;
+            const localRaw = localStorage.getItem(key);
+            const best = Math.max(scoresMap[id] || 0, +(localRaw ? localRaw.replace(/"/g, '') : 0) || 0);
+            badge.textContent = best > 0 ? `🏆 ${best.toLocaleString()}` : 'Sin récord';
+        });
+    }
+
+    function renderGames(scoresMap) {
+        const container = document.getElementById('games-container');
+        container.innerHTML = '';
 
         // Mensaje de resultados vacíos (búsqueda sin coincidencias)
         const emptyMsg = document.createElement('div');
@@ -419,6 +466,7 @@
 
             const card = document.createElement('div');
             card.className = 'game-card';
+            card.dataset.id = game.id;
             card.dataset.cat = (game.cats || []).join(',');
             card.dataset.search = normalize(`${game.name} ${game.desc} ${game.id}`);
             card.style.animation = `fadeInUp 0.5s ease forwards ${Math.min(index, 12) * 0.05}s`;
